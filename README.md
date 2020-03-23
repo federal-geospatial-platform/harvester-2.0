@@ -2,22 +2,25 @@
 The Open Government Secretariat's (OGS) Open Maps (OM) harvester pulling from the Federal Geospatial Platform (FGP) developed and maintained at Statistics Canada (StatCan).
 
 ![Harvester - FGP - Diagram](https://raw.githubusercontent.com/open-data/harvester-FGP/master/docs/Harvest%20Diagram.png)
-##global.py
+
+## globals.py
 Here you can swith environment mode production and staging
-To run in production un comment OPERATION_ENV = 'production' and comment #OPERATION_ENV = 'staging' like so:
-...
+To run in production un comment OPERATION_ENV = 'production' and comment #OPERATION_ENV = 'staging' like so:  
+```
+...  
 OPERATION_ENV = 'production' 
 ### or ### 
 #OPERATION_ENV = 'staging'
-...
-
-To run in staging, comment #OPERATION_ENV = 'production' and un-comment OPERATION_ENV = 'staging' like so:
-...
+...  
+```
+To run in staging, comment #OPERATION_ENV = 'production' and un-comment OPERATION_ENV = 'staging' like so:  
+```
+... 
 #OPERATION_ENV = 'production' 
 ### or ### 
 OPERATION_ENV = 'staging'
-...
-
+...  
+```
 ## harvest_hnap.py
 Extract *HNAP* XML from the CSW source.  Prints xml out to be piped to another command or to a file.
 
