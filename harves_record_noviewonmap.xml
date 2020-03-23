@@ -1,0 +1,1985 @@
+    <gmd:MD_Metadata xmlns:gmd="http://www.isotc211.org/2005/gmd" xmlns:srv="http://www.isotc211.org/2005/srv" xmlns:gco="http://www.isotc211.org/2005/gco" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:gts="http://www.isotc211.org/2005/gts" xmlns:gml="http://www.opengis.net/gml" xmlns:gmx="http://www.isotc211.org/2005/gmx" xmlns:geonet="http://www.fao.org/geonetwork" xsi:schemaLocation="http://www.isotc211.org/2005/gmd http://nap.geogratis.gc.ca/metadata/tools/schemas/metadata/can-cgsb-171.100-2009-a/gmd/gmd.xsd http://www.isotc211.org/2005/srv http://nap.geogratis.gc.ca/metadata/tools/schemas/metadata/can-cgsb-171.100-2009-a/srv/srv.xsd http://www.geconnections.org/nap/napMetadataTools/napXsd/napm http://nap.geogratis.gc.ca/metadata/tools/schemas/metadata/can-cgsb-171.100-2009-a/napm/napm.xsd">
+
+      <gmd:fileIdentifier xmlns:gml="http://www.opengis.net/gml/3.2">
+
+        <gco:CharacterString>d3881c4c-650d-4070-bf9b-1e00aabf0a1d</gco:CharacterString>
+
+      </gmd:fileIdentifier>
+
+      <gmd:language>
+
+        <gco:CharacterString>eng; CAN</gco:CharacterString>
+
+      </gmd:language>
+
+      <gmd:characterSet xmlns:gml="http://www.opengis.net/gml/3.2">
+
+        <gmd:MD_CharacterSetCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_95" codeListValue="RI_458">utf8; utf8</gmd:MD_CharacterSetCode>
+
+      </gmd:characterSet>
+
+      <gmd:hierarchyLevel>
+
+        <gmd:MD_ScopeCode xmlns:gml="http://www.opengis.net/gml/3.2" codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_108" codeListValue="RI_622">dataset; jeuDonnées</gmd:MD_ScopeCode>
+
+      </gmd:hierarchyLevel>
+
+      <gmd:contact>
+
+        <gmd:CI_ResponsibleParty>
+
+          <gmd:individualName gco:nilReason="missing">
+
+            <gco:CharacterString />
+
+          </gmd:individualName>
+
+          <gmd:organisationName xsi:type="gmd:PT_FreeText_PropertyType">
+
+            <gco:CharacterString>Government of Canada; Fisheries and Oceans Canada; Canadian Hydrographic Service</gco:CharacterString>
+
+            <gmd:PT_FreeText>
+
+              <gmd:textGroup>
+
+                <gmd:LocalisedCharacterString locale="#fra">Gouvernement du Canada; Pêches et Océans Canada; Service hydrographique du Canada</gmd:LocalisedCharacterString>
+
+              </gmd:textGroup>
+
+            </gmd:PT_FreeText>
+
+          </gmd:organisationName>
+
+          <gmd:positionName xsi:type="gmd:PT_FreeText_PropertyType" gco:nilReason="missing">
+
+            <gco:CharacterString />
+
+            <gmd:PT_FreeText>
+
+              <gmd:textGroup>
+
+                <gmd:LocalisedCharacterString locale="#fra" />
+
+              </gmd:textGroup>
+
+            </gmd:PT_FreeText>
+
+          </gmd:positionName>
+
+          <gmd:contactInfo>
+
+            <gmd:CI_Contact>
+
+              <gmd:phone>
+
+                <gmd:CI_Telephone />
+
+              </gmd:phone>
+
+              <gmd:address>
+
+                <gmd:CI_Address>
+
+                  <gmd:deliveryPoint xsi:type="gmd:PT_FreeText_PropertyType" gco:nilReason="missing">
+
+                    <gco:CharacterString />
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra" />
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:deliveryPoint>
+
+                  <gmd:city gco:nilReason="missing">
+
+                    <gco:CharacterString />
+
+                  </gmd:city>
+
+                  <gmd:administrativeArea xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString xmlns:gml="http://www.opengis.net/gml/3.2" />
+
+                    <gmd:PT_FreeText xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra" />
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:administrativeArea>
+
+                  <gmd:postalCode gco:nilReason="missing">
+
+                    <gco:CharacterString />
+
+                  </gmd:postalCode>
+
+                  <gmd:country xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Canada</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Canada</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:country>
+
+                  <gmd:electronicMailAddress xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>chsinfo@dfo-mpo.gc.ca</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">chsinfo@dfo-mpo.gc.ca</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:electronicMailAddress>
+
+                </gmd:CI_Address>
+
+              </gmd:address>
+
+            </gmd:CI_Contact>
+
+          </gmd:contactInfo>
+
+          <gmd:role xmlns:gml="http://www.opengis.net/gml/3.2">
+
+            <gmd:CI_RoleCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_90" codeListValue="RI_408">resourceProvider; fournisseurRessource</gmd:CI_RoleCode>
+
+          </gmd:role>
+
+        </gmd:CI_ResponsibleParty>
+
+      </gmd:contact>
+
+      <gmd:dateStamp>
+
+        <gco:DateTime xmlns:gml="http://www.opengis.net/gml/3.2">2018-12-07T14:13:52</gco:DateTime>
+
+      </gmd:dateStamp>
+
+      <gmd:metadataStandardName xsi:type="gmd:PT_FreeText_PropertyType">
+
+        <gco:CharacterString>North American Profile of ISO 19115:2003 - Geographic information - Metadata</gco:CharacterString>
+
+        <gmd:PT_FreeText>
+
+          <gmd:textGroup>
+
+            <gmd:LocalisedCharacterString locale="#fra">Profil nord-américain de la norme ISO 19115:2003 - Information géographique - Métadonnées</gmd:LocalisedCharacterString>
+
+          </gmd:textGroup>
+
+        </gmd:PT_FreeText>
+
+      </gmd:metadataStandardName>
+
+      <gmd:metadataStandardVersion>
+
+        <gco:CharacterString>NAP - CAN/CGSB-171.100-2009</gco:CharacterString>
+
+      </gmd:metadataStandardVersion>
+
+      <gmd:locale>
+
+        <gmd:PT_Locale id="fra">
+
+          <gmd:languageCode xmlns:gml="http://www.opengis.net/gml/3.2">
+
+            <gmd:LanguageCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_116" codeListValue="fra">French; Français</gmd:LanguageCode>
+
+          </gmd:languageCode>
+
+          <gmd:characterEncoding>
+
+            <gmd:MD_CharacterSetCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_95" codeListValue="RI_458">utf8</gmd:MD_CharacterSetCode>
+
+          </gmd:characterEncoding>
+
+        </gmd:PT_Locale>
+
+      </gmd:locale>
+
+      <gmd:referenceSystemInfo>
+
+        <gmd:MD_ReferenceSystem>
+
+          <gmd:referenceSystemIdentifier>
+
+            <gmd:RS_Identifier>
+
+              <gmd:code>
+
+                <gco:CharacterString>EPSG:4326</gco:CharacterString>
+
+              </gmd:code>
+
+              <gmd:codeSpace>
+
+                <gco:CharacterString>http://www.epsg-registry.org</gco:CharacterString>
+
+              </gmd:codeSpace>
+
+              <gmd:version gco:nilReason="missing">
+
+                <gco:CharacterString />
+
+              </gmd:version>
+
+            </gmd:RS_Identifier>
+
+          </gmd:referenceSystemIdentifier>
+
+        </gmd:MD_ReferenceSystem>
+
+      </gmd:referenceSystemInfo>
+
+      <gmd:identificationInfo>
+
+        <gmd:MD_DataIdentification>
+
+          <gmd:citation>
+
+            <gmd:CI_Citation>
+
+              <gmd:title xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>Canadian Hydrographic Service Non-Navigational (NONNA-100) Bathymetric Data</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">Cellules Bathymétriques Destinés à des Fins Autres que la Navigation (NONNA-100) du Service Hydrographique du Canada</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:title>
+
+              <gmd:date>
+
+                <gmd:CI_Date>
+
+                  <gmd:date>
+
+                    <gco:Date>2018-03-23</gco:Date>
+
+                  </gmd:date>
+
+                  <gmd:dateType xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                    <gmd:CI_DateTypeCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_87" codeListValue="RI_366">creation; création</gmd:CI_DateTypeCode>
+
+                  </gmd:dateType>
+
+                </gmd:CI_Date>
+
+              </gmd:date>
+
+              <gmd:date>
+
+                <gmd:CI_Date>
+
+                  <gmd:date>
+
+                    <gco:Date>2018-12-03</gco:Date>
+
+                  </gmd:date>
+
+                  <gmd:dateType xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                    <gmd:CI_DateTypeCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_87" codeListValue="RI_367">publication; publication</gmd:CI_DateTypeCode>
+
+                  </gmd:dateType>
+
+                </gmd:CI_Date>
+
+              </gmd:date>
+
+              <gmd:citedResponsibleParty>
+
+                <gmd:CI_ResponsibleParty>
+
+                  <gmd:individualName gco:nilReason="missing">
+
+                    <gco:CharacterString />
+
+                  </gmd:individualName>
+
+                  <gmd:organisationName xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Government of Canada; Fisheries and Oceans Canada; Canadian Hydrographic Service</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Gouvernement du Canada; Pêches et Océans Canada; Service hydrographique du Canada</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:organisationName>
+
+                  <gmd:positionName xsi:type="gmd:PT_FreeText_PropertyType" gco:nilReason="missing">
+
+                    <gco:CharacterString />
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra" />
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:positionName>
+
+                  <gmd:contactInfo>
+
+                    <gmd:CI_Contact>
+
+                      <gmd:phone>
+
+                        <gmd:CI_Telephone />
+
+                      </gmd:phone>
+
+                      <gmd:address>
+
+                        <gmd:CI_Address>
+
+                          <gmd:deliveryPoint xsi:type="gmd:PT_FreeText_PropertyType" gco:nilReason="missing">
+
+                            <gco:CharacterString />
+
+                            <gmd:PT_FreeText>
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra" />
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:deliveryPoint>
+
+                          <gmd:city gco:nilReason="missing">
+
+                            <gco:CharacterString />
+
+                          </gmd:city>
+
+                          <gmd:administrativeArea xsi:type="gmd:PT_FreeText_PropertyType">
+
+                            <gco:CharacterString xmlns:gml="http://www.opengis.net/gml/3.2" />
+
+                            <gmd:PT_FreeText xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra" />
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:administrativeArea>
+
+                          <gmd:postalCode gco:nilReason="missing">
+
+                            <gco:CharacterString />
+
+                          </gmd:postalCode>
+
+                          <gmd:country xsi:type="gmd:PT_FreeText_PropertyType">
+
+                            <gco:CharacterString>Canada</gco:CharacterString>
+
+                            <gmd:PT_FreeText>
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra">Canada</gmd:LocalisedCharacterString>
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:country>
+
+                          <gmd:electronicMailAddress xsi:type="gmd:PT_FreeText_PropertyType">
+
+                            <gco:CharacterString>chsinfo@dfo-mpo.gc.ca</gco:CharacterString>
+
+                            <gmd:PT_FreeText>
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra">chsinfo@dfo-mpo.gc.ca</gmd:LocalisedCharacterString>
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:electronicMailAddress>
+
+                        </gmd:CI_Address>
+
+                      </gmd:address>
+
+                    </gmd:CI_Contact>
+
+                  </gmd:contactInfo>
+
+                  <gmd:role xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                    <gmd:CI_RoleCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_90" codeListValue="RI_408">resourceProvider; fournisseurRessource</gmd:CI_RoleCode>
+
+                  </gmd:role>
+
+                </gmd:CI_ResponsibleParty>
+
+              </gmd:citedResponsibleParty>
+
+              <gmd:presentationForm xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                <gmd:CI_PresentationFormCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_89" codeListValue="RI_389">imageDigital; imageNumérique</gmd:CI_PresentationFormCode>
+
+              </gmd:presentationForm>
+
+            </gmd:CI_Citation>
+
+          </gmd:citation>
+
+          <gmd:abstract xsi:type="gmd:PT_FreeText_PropertyType">
+
+            <gco:CharacterString>The Canadian Hydrographic Service (CHS) NONNA-100 Bathymetric Data products are non-navigational 100m resolution bathymetric products. 
+
+
+
+- « NONNA » refers to NON-NAvigational
+
+- « 100 » refers to the approximate resolution (metres) of the products
+
+
+
+The CHS NONNA-100 Bathymetric Data products represent all currently validated, digital bathymetric sources acquired by CHS, combined at a resolution of approximately 100 metres. This bathymetry is available for download in both 32-bit GeoTIFF and XYZ formats. Additionally, the data can be accessed and viewed using ArcGIS or Google Earth, among others. There are detailed instructions available below which show the varying ways to view, access and download this data.
+
+
+
+The CHS NONNA-100 individual product coverage is as follows:
+
+•	South of 68°N the products = 1° latitude X 1° longitude (0.001 degrees)
+
+•	68°N-80°N the products = 1° latitude X 2° longitude (0.002 degrees)
+
+•	80°N and north the products = 1° latitude X 4° longitude (0.004 degrees)
+
+
+
+
+
+*IMPORTANT NOTES* 
+
+The Arctic CHS NONNA-100 datasets north of 80 degrees are currently under construction. An update will be provided once these products are complete.
+
+
+
+There are various valid vertical datums associated with CHS' bathymetric sources. As a result, the vertical reference of the CHS NONNA-100 has not been adjusted to a unified vertical datum.
+
+
+
+There may be data visible on land. These are elevations that were acquired during LiDAR surveys. The values will appear as a positive number when querying the data.
+
+
+
+For bathymetry in non-Canadian waters, please consult the appropriate Hydrographic Office.</gco:CharacterString>
+
+            <gmd:PT_FreeText>
+
+              <gmd:textGroup>
+
+                <gmd:LocalisedCharacterString locale="#fra">Les produits de données bathymétriques NONNA-100 du service hydrographique du Canada (SHC) sont des produits bathymétriques dotés d’une résolution de 100 m qui ne sont pas destinés à la navigation. 
+
+
+
+– « NONNA » signifie NON destiné à la NAvigation.
+
+– « 100 » est la résolution des produits en mètres.
+
+
+
+Les produits de données bathymétriques NONNA-100 représentent toutes les sources de données bathymétriques numériques du SHC combinées, avec une résolution d’approximativement100 mètres. Cette bathymétrie peut être téléchargée en format TIFF ou XYZ de 32 octets. Par ailleurs, les données peuvent être obtenues et visionnées à l’aide d’ArcGIS et Google Earth, entre autres. Les instructions pour visionner et télécharger les données, ainsi que pour y accéder de diverses manières sont indiquées plus bas.
+
+
+
+La couverture individuelle des produits SHC NONNA-100 est la suivante :
+
+•	Au sud de 68° N, les produits = 1° de latitude X 1° de longitude.
+
+•	Entre 68° N et 80° N, les produits = 1° de latitude X 2° de longitude.
+
+•	À partir de 80° N, les produits = 1° de latitude X 4° de longitude.
+
+
+
+
+
+*REMARQUES IMPORTANTES* 
+
+Les ensembles de données SHC NONNA-100 sur l’Arctique, au nord des 80 degrés, sont en cours de préparation. Une mise à jour sera envoyée aussitôt que ces produits seront terminés.
+
+
+
+Plusieurs données du canevas altimétrique valides sont associées aux sources bathymétriques de SHC. Pour le moment, les éléments de référence verticale issus des différentes sources n’ont pas été réglés pour obtenir des éléments de référence verticaux communs. Les références verticales des données SHC NONNA-100 ne sont donc pas contrôlées.
+
+
+
+Il se pourrait que certaines données sur les terres soient visibles. Il s’agit d’élévations qui ont été obtenues par l’entremise de levées au LIDAR. Lorsqu’une recherche sera effectuée, les données apparaîtront sous forme de chiffres positifs.
+
+
+
+Pour de la bathymétrie en dehors des eaux canadiennes, veuillez communiquer avec le bureau hydrographique pertinent.</gmd:LocalisedCharacterString>
+
+              </gmd:textGroup>
+
+            </gmd:PT_FreeText>
+
+          </gmd:abstract>
+
+          <gmd:status xmlns:gml="http://www.opengis.net/gml/3.2">
+
+            <gmd:MD_ProgressCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_106" codeListValue="RI_596">onGoing; enContinue</gmd:MD_ProgressCode>
+
+          </gmd:status>
+
+          <gmd:resourceMaintenance>
+
+            <gmd:MD_MaintenanceInformation>
+
+              <gmd:maintenanceAndUpdateFrequency xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                <gmd:MD_MaintenanceFrequencyCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_102" codeListValue="RI_543">unknown; inconnu</gmd:MD_MaintenanceFrequencyCode>
+
+              </gmd:maintenanceAndUpdateFrequency>
+
+            </gmd:MD_MaintenanceInformation>
+
+          </gmd:resourceMaintenance>
+
+          <gmd:graphicOverview xlink:role="graphicOverview">
+
+            <gmd:MD_BrowseGraphic>
+
+              <gmd:fileName>
+
+                <gco:CharacterString>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/NONNA_100/FGP_NONNAThumbnail.JPG</gco:CharacterString>
+
+              </gmd:fileName>
+
+            </gmd:MD_BrowseGraphic>
+
+          </gmd:graphicOverview>
+
+          <gmd:descriptiveKeywords xmlns:gml="http://www.opengis.net/gml/3.2">
+
+            <gmd:MD_Keywords>
+
+              <gmd:keyword xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>Bathymetry</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">Bathymétrie</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:keyword>
+
+              <gmd:keyword xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>Depth</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">les profondeurs des fonds marins</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:keyword>
+
+              <gmd:type>
+
+                <gmd:MD_KeywordTypeCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_101" codeListValue="RI_528">theme; thème</gmd:MD_KeywordTypeCode>
+
+              </gmd:type>
+
+            </gmd:MD_Keywords>
+
+          </gmd:descriptiveKeywords>
+
+          <gmd:descriptiveKeywords xmlns:gml="http://www.opengis.net/gml/3.2">
+
+            <gmd:MD_Keywords>
+
+              <gmd:keyword xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>Hydrography</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">Hydrographie</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:keyword>
+
+              <gmd:type>
+
+                <gmd:MD_KeywordTypeCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_101" codeListValue="theme" />
+
+              </gmd:type>
+
+              <gmd:thesaurusName xmlns:gml="http://www.opengis.net/gml">
+
+                <gmd:CI_Citation>
+
+                  <gmd:title xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Government of Canada Core Subject Thesaurus</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Thésaurus des sujets de base du gouvernement du Canada</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:title>
+
+                  <gmd:date>
+
+                    <gmd:CI_Date>
+
+                      <gmd:date>
+
+                        <gco:Date>2004</gco:Date>
+
+                      </gmd:date>
+
+                      <gmd:dateType xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                        <gmd:CI_DateTypeCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_87" codeListValue="RI_366">creation; création</gmd:CI_DateTypeCode>
+
+                      </gmd:dateType>
+
+                    </gmd:CI_Date>
+
+                  </gmd:date>
+
+                  <gmd:date>
+
+                    <gmd:CI_Date>
+
+                      <gmd:date>
+
+                        <gco:Date>2015-03-26</gco:Date>
+
+                      </gmd:date>
+
+                      <gmd:dateType xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                        <gmd:CI_DateTypeCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_87" codeListValue="RI_367">publication; publication</gmd:CI_DateTypeCode>
+
+                      </gmd:dateType>
+
+                    </gmd:CI_Date>
+
+                  </gmd:date>
+
+                  <gmd:citedResponsibleParty>
+
+                    <gmd:CI_ResponsibleParty>
+
+                      <gmd:organisationName xsi:type="gmd:PT_FreeText_PropertyType">
+
+                        <gco:CharacterString>Government of Canada; Library and
+
+											Archives Canada</gco:CharacterString>
+
+                        <gmd:PT_FreeText>
+
+                          <gmd:textGroup>
+
+                            <gmd:LocalisedCharacterString locale="#fra">Gouvernement du Canada; Bibliothèque et Archives
+
+													Canada</gmd:LocalisedCharacterString>
+
+                          </gmd:textGroup>
+
+                        </gmd:PT_FreeText>
+
+                      </gmd:organisationName>
+
+                      <gmd:role xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                        <gmd:CI_RoleCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_90" codeListValue="RI_409">custodian; conservateur</gmd:CI_RoleCode>
+
+                      </gmd:role>
+
+                    </gmd:CI_ResponsibleParty>
+
+                  </gmd:citedResponsibleParty>
+
+                </gmd:CI_Citation>
+
+              </gmd:thesaurusName>
+
+            </gmd:MD_Keywords>
+
+          </gmd:descriptiveKeywords>
+
+          <gmd:resourceConstraints>
+
+            <gmd:MD_LegalConstraints>
+
+              <gmd:useLimitation xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>Not to be used for navigation purposes.</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">Ne pas être utilisé à des fins de navigation.</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:useLimitation>
+
+              <gmd:accessConstraints>
+
+                <gmd:MD_RestrictionCode xmlns:gml="http://www.opengis.net/gml/3.2" codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107" codeListValue="RI_610">licenseUnrestricted; licenceSansRestriction</gmd:MD_RestrictionCode>
+
+              </gmd:accessConstraints>
+
+              <gmd:useConstraints>
+
+                <gmd:MD_RestrictionCode xmlns:gml="http://www.opengis.net/gml/3.2" codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107" codeListValue="RI_609">otherRestrictions; autresRestrictions</gmd:MD_RestrictionCode>
+
+              </gmd:useConstraints>
+
+            </gmd:MD_LegalConstraints>
+
+          </gmd:resourceConstraints>
+
+          <gmd:resourceConstraints>
+
+            <gmd:MD_LegalConstraints>
+
+              <gmd:useLimitation xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>Open Government Licence - Canada (http://open.canada.ca/en/open-government-licence-canada)</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">Licence du gouvernement ouvert - Canada (http://ouvert.canada.ca/fr/licence-du-gouvernement-ouvert-canada)</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:useLimitation>
+
+              <gmd:accessConstraints>
+
+                <gmd:MD_RestrictionCode xmlns:gml="http://www.opengis.net/gml/3.2" codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107" codeListValue="RI_610">licenseUnrestricted; licenceSansRestriction</gmd:MD_RestrictionCode>
+
+              </gmd:accessConstraints>
+
+              <gmd:useConstraints>
+
+                <gmd:MD_RestrictionCode xmlns:gml="http://www.opengis.net/gml/3.2" codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107" codeListValue="RI_606">license; licence</gmd:MD_RestrictionCode>
+
+              </gmd:useConstraints>
+
+              <gmd:otherConstraints gco:nilReason="missing">
+
+                <gco:CharacterString />
+
+              </gmd:otherConstraints>
+
+            </gmd:MD_LegalConstraints>
+
+          </gmd:resourceConstraints>
+
+          <gmd:resourceConstraints>
+
+            <gmd:MD_LegalConstraints>
+
+              <gmd:useLimitation xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:useLimitation>
+
+              <gmd:accessConstraints>
+
+                <gmd:MD_RestrictionCode xmlns:gml="http://www.opengis.net/gml/3.2" codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107" codeListValue="RI_610">licenseUnrestricted; licenceSansRestriction</gmd:MD_RestrictionCode>
+
+              </gmd:accessConstraints>
+
+              <gmd:useConstraints>
+
+                <gmd:MD_RestrictionCode xmlns:gml="http://www.opengis.net/gml/3.2" codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_107" codeListValue="RI_610">licenseUnrestricted; licenceSansRestriction</gmd:MD_RestrictionCode>
+
+              </gmd:useConstraints>
+
+              <gmd:otherConstraints gco:nilReason="missing">
+
+                <gco:CharacterString />
+
+              </gmd:otherConstraints>
+
+            </gmd:MD_LegalConstraints>
+
+          </gmd:resourceConstraints>
+
+          <gmd:spatialRepresentationType xmlns:gml="http://www.opengis.net/gml/3.2">
+
+            <gmd:MD_SpatialRepresentationTypeCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_109" codeListValue="RI_636">grid; grille</gmd:MD_SpatialRepresentationTypeCode>
+
+          </gmd:spatialRepresentationType>
+
+          <gmd:language>
+
+            <gco:CharacterString>eng</gco:CharacterString>
+
+          </gmd:language>
+
+          <gmd:language>
+
+            <gco:CharacterString>fra</gco:CharacterString>
+
+          </gmd:language>
+
+          <gmd:topicCategory>
+
+            <gmd:MD_TopicCategoryCode>oceans</gmd:MD_TopicCategoryCode>
+
+          </gmd:topicCategory>
+
+          <gmd:topicCategory>
+
+            <gmd:MD_TopicCategoryCode>inlandWaters</gmd:MD_TopicCategoryCode>
+
+          </gmd:topicCategory>
+
+          <gmd:extent>
+
+            <gmd:EX_Extent>
+
+              <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>The CHS NONNA-100 non-navigational bathymetric data covers all Canadian waters where the Canadian Hydrographic Service has acquired bathymetric data.</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">Les données bathymétriques SHC NONNA-100 non destinées à la navigation couvrent l’ensemble des eaux canadiennes, là où le service hydrographique du Canada a obtenu des données bathymétriques.</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:description>
+
+              <gmd:geographicElement>
+
+                <gmd:EX_GeographicBoundingBox>
+
+                  <gmd:westBoundLongitude>
+
+                    <gco:Decimal>-143</gco:Decimal>
+
+                  </gmd:westBoundLongitude>
+
+                  <gmd:eastBoundLongitude>
+
+                    <gco:Decimal>-47</gco:Decimal>
+
+                  </gmd:eastBoundLongitude>
+
+                  <gmd:southBoundLatitude>
+
+                    <gco:Decimal>39.05</gco:Decimal>
+
+                  </gmd:southBoundLatitude>
+
+                  <gmd:northBoundLatitude>
+
+                    <gco:Decimal>80</gco:Decimal>
+
+                  </gmd:northBoundLatitude>
+
+                </gmd:EX_GeographicBoundingBox>
+
+              </gmd:geographicElement>
+
+            </gmd:EX_Extent>
+
+          </gmd:extent>
+
+        </gmd:MD_DataIdentification>
+
+      </gmd:identificationInfo>
+
+      <gmd:distributionInfo>
+
+        <gmd:MD_Distribution>
+
+          <gmd:distributionFormat>
+
+            <gmd:MD_Format>
+
+              <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>GeoTIF</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">GeoTIF</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:name>
+
+              <gmd:version xsi:type="gmd:PT_FreeText_PropertyType">
+
+                <gco:CharacterString>Unknown</gco:CharacterString>
+
+                <gmd:PT_FreeText>
+
+                  <gmd:textGroup>
+
+                    <gmd:LocalisedCharacterString locale="#fra">Unknown</gmd:LocalisedCharacterString>
+
+                  </gmd:textGroup>
+
+                </gmd:PT_FreeText>
+
+              </gmd:version>
+
+            </gmd:MD_Format>
+
+          </gmd:distributionFormat>
+
+          <gmd:distributor>
+
+            <gmd:MD_Distributor>
+
+              <gmd:distributorContact>
+
+                <gmd:CI_ResponsibleParty>
+
+                  <gmd:individualName gco:nilReason="missing">
+
+                    <gco:CharacterString />
+
+                  </gmd:individualName>
+
+                  <gmd:organisationName xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Government of Canada; Fisheries and Oceans Canada; Canadian Hydrographic Service</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Gouvernement du Canada; Pêches et Océans Canada; Service hydrographique du Canada</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:organisationName>
+
+                  <gmd:positionName xsi:type="gmd:PT_FreeText_PropertyType" gco:nilReason="missing">
+
+                    <gco:CharacterString />
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra" />
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:positionName>
+
+                  <gmd:contactInfo>
+
+                    <gmd:CI_Contact>
+
+                      <gmd:phone>
+
+                        <gmd:CI_Telephone />
+
+                      </gmd:phone>
+
+                      <gmd:address>
+
+                        <gmd:CI_Address>
+
+                          <gmd:deliveryPoint xsi:type="gmd:PT_FreeText_PropertyType" gco:nilReason="missing">
+
+                            <gco:CharacterString />
+
+                            <gmd:PT_FreeText>
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra" />
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:deliveryPoint>
+
+                          <gmd:city gco:nilReason="missing">
+
+                            <gco:CharacterString />
+
+                          </gmd:city>
+
+                          <gmd:administrativeArea xsi:type="gmd:PT_FreeText_PropertyType">
+
+                            <gco:CharacterString xmlns:gml="http://www.opengis.net/gml/3.2" />
+
+                            <gmd:PT_FreeText xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra" />
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:administrativeArea>
+
+                          <gmd:postalCode gco:nilReason="missing">
+
+                            <gco:CharacterString />
+
+                          </gmd:postalCode>
+
+                          <gmd:country xsi:type="gmd:PT_FreeText_PropertyType">
+
+                            <gco:CharacterString>Canada</gco:CharacterString>
+
+                            <gmd:PT_FreeText>
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra">Canada (le)</gmd:LocalisedCharacterString>
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:country>
+
+                          <gmd:electronicMailAddress xsi:type="gmd:PT_FreeText_PropertyType">
+
+                            <gco:CharacterString>chsinfo@dfo-mpo.gc.ca</gco:CharacterString>
+
+                            <gmd:PT_FreeText>
+
+                              <gmd:textGroup>
+
+                                <gmd:LocalisedCharacterString locale="#fra">chsinfo@dfo-mpo.gc.ca</gmd:LocalisedCharacterString>
+
+                              </gmd:textGroup>
+
+                            </gmd:PT_FreeText>
+
+                          </gmd:electronicMailAddress>
+
+                        </gmd:CI_Address>
+
+                      </gmd:address>
+
+                    </gmd:CI_Contact>
+
+                  </gmd:contactInfo>
+
+                  <gmd:role xmlns:gml="http://www.opengis.net/gml/3.2">
+
+                    <gmd:CI_RoleCode codeList="http://nap.geogratis.gc.ca/metadata/register/napMetadataRegister.xml#IC_90" codeListValue="RI_412">distributor; distributeur</gmd:CI_RoleCode>
+
+                  </gmd:role>
+
+                </gmd:CI_ResponsibleParty>
+
+              </gmd:distributorContact>
+
+            </gmd:MD_Distributor>
+
+          </gmd:distributor>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/NONNA_100/CHS_NONNA_100.zip</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>CHS NONNA-100 Bathymetric Data (GeoTIFF format - downloadable)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Données bathymétriques SHC NONNA-100 (format GeoTIFF – téléchargeable)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Dataset;ZIP;eng,fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Données;ZIP;eng,fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://geoportal.gc.ca/arcgis/rest/services/FGP/CHS_NONNA_100/ImageServer</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>CHS NONNA-100 Bathymetric Data - Image Service</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Données bathymétriques SHC NONNA-100 – service d’imagerie</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Web Service;ESRI REST;eng,fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Service Web;ESRI REST;eng,fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://geoportal.gc.ca/arcgis/services/FGP/CHS_NONNA_100/MapServer/WMSServer?request=GetCapabilities&amp;service=WMS</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>CHS NONNA-100 Bathymetric Data - WMS Map Service</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Données bathymétriques SHC NONNA-100 – service cartographique WMS</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Web Service;WMS;eng,fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Service Web;WMS;eng,fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/NONNA_100/CHS_NONNA_100_Index.kml</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>CHS NONNA-100 Bathymetric Dataset Index (KML format)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Index de l’ensemble de données bathymétriques SHC NONNA-100 (format KLM)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Supporting Document;KML;eng,fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Document de soutien;KML;eng,fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine xlink:role="urn:xml:lang:eng-CAN">
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://geoportal.gc.ca/arcgis/rest/services/FGP/CHS_NONNA_100/MapServer/0</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>ESRI REST: Map Server</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>CHS NONNA-100 Bathymetric Data</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">SHC NONNA-100 Données Bathymétriques</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Web Service;ESRI REST;eng</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Service Web;ESRI REST;eng</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine xlink:role="urn:xml:lang:fra-CAN">
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://geoportal.gc.ca/arcgis/rest/services/FGP/CHS_NONNA_100_Fr/MapServer/0</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>ESRI REST: Map Server</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>CHS NONNA-100 Bathymetric Data</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">SHC NONNA-100 Données Bathymétriques</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Web Service;ESRI REST;fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Service Web;ESRI REST;fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/NONNA_100/How_to_access_and_download_CHS_NONNA_100_on_FGP_en.pdf</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>How to access and download CHS NONNA-100 on FGP (English)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Comment accéder et télécharger NONNA-100 du SHC sur la PGF (Anglais)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Supporting Document;PDF;eng</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Document de soutien;PDF;eng</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/NONNA_100/Comment_acceder_et_telecharger_SHC_NONNA_100_sur_PGF_fr.pdf</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>How to access and download CHS NONNA-100 on FGP (French)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Comment accéder et télécharger NONNA-100 du SHC sur la PGF (Français)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Supporting Document;PDF;fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Document de soutien;PDF;fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/How_to_build_a_multilayered_map_FGP_eng.pdf</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>How to build a multilayered map in FGP (English)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Comment creer une carte dans la plateforme geospatiale federale (Anglais)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Supporting Document;PDF;eng</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Document de soutien;PDF;eng</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/How_to_build_a_multilayered_map_FGP_fra.pdf</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>How to build a multilayered map in FGP (French)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Comment creer une carte dans la plateforme geospatiale federale (Français)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Supporting Document;PDF;fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Document de soutien;PDF;fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/How_to_build_a_multilayered_map_OM_eng.pdf</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>How to build a multilayered map in Open Data (English)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Comment creer une carte dans les Données Ouvertes (Anglais)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Supporting Document;PDF;eng</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Document de soutien;PDF;eng</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/How_to_build_a_multilayered_map_OM_fra.pdf</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>How to build a multilayered map in Open Data (French)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Comment creer une carte dans les Données Ouvertes (Français)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Supporting Document;PDF;fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Document de soutien;PDF;fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+          <gmd:transferOptions>
+
+            <gmd:MD_DigitalTransferOptions>
+
+              <gmd:onLine>
+
+                <gmd:CI_OnlineResource>
+
+                  <gmd:linkage>
+
+                    <gmd:URL>https://pacgis01.dfo-mpo.gc.ca/FGPPublic/NONNA_100/NONNA_XYZ.zip</gmd:URL>
+
+                  </gmd:linkage>
+
+                  <gmd:protocol>
+
+                    <gco:CharacterString>HTTPS</gco:CharacterString>
+
+                  </gmd:protocol>
+
+                  <gmd:name xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>CHS NONNA-100 Bathymetric Data (XYZ format - downloadable)</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Données bathymétriques SHC NONNA-100 (format XYZ – téléchargeable)</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:name>
+
+                  <gmd:description xsi:type="gmd:PT_FreeText_PropertyType">
+
+                    <gco:CharacterString>Dataset;ZIP;eng,fra</gco:CharacterString>
+
+                    <gmd:PT_FreeText>
+
+                      <gmd:textGroup>
+
+                        <gmd:LocalisedCharacterString locale="#fra">Données;ZIP;eng,fra</gmd:LocalisedCharacterString>
+
+                      </gmd:textGroup>
+
+                    </gmd:PT_FreeText>
+
+                  </gmd:description>
+
+                </gmd:CI_OnlineResource>
+
+              </gmd:onLine>
+
+            </gmd:MD_DigitalTransferOptions>
+
+          </gmd:transferOptions>
+
+        </gmd:MD_Distribution>
+
+      </gmd:distributionInfo>
+
+    </gmd:MD_Metadata>
+
+   
