@@ -728,10 +728,12 @@ def main():
 
             json_record[schema_ref["32"]['CKAN API property']] = {}
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["32"])
+            value_old = value
             if value:
 
                 # format line breaks
                 value = value.replace('\n', '  \n  \n  ')
+                value = value.replace('----------------------------------------------------------','  \n  \n  ----------------------------------------------------------  \n  \n  ')
 
                 json_record[
                     schema_ref["32"]['CKAN API property']
@@ -742,10 +744,12 @@ def main():
 # CC::OpenMaps-33 Description (French)
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["33"])
+            value_old = value
             if value:
 
                 # format line breaks
                 value = value.replace('\n', '  \n  \n  ')
+                value = value.replace('----------------------------------------------------------','\n----------------------------------------------------------\n')
 
                 json_record[
                     schema_ref["32"]['CKAN API property']
@@ -2395,11 +2399,14 @@ GC_Registry_of_Applied_Terms = {
     ## Alberta Gov Department
     ############################################
     'Government of Alberta; Alberta Geological Survey'                                                                                                               :['Alberta Geological Survey', 'ab', 'Commission géologique de l\'Alberta','ab','66677'],
-    'Government of Alberta; Alberta Environment and Parks'                                                                                                           :['Alberta Environment and Parks', 'ab', 'Environnement et parcs de l\'Alberta','ab','66677'],
+    'Government of Alberta; Alberta Environment and Parks'                                                                                                           :['Alberta Environment and Parks', 'ab', 'Environnement et parcs de l\'Alberta','ab','666772'],
+    'Government of Alberta; Alberta Parks'                                                                                                                           :['Alberta Parks', 'ab', 'Parcs de l\'Alberta','ab','666771'],
     'Government of Alberta; Land Use Secretariat'                                                                                                                    :['Land Use Secretariat', 'ab', '; Secrétariat de l\'utilisation des terres','ab','66677'],
-    'Government of Alberta; Government Data'                                                                                                                         :['Government Data', 'ab', '; Données gouvernementales','ab','66677'],
-    'Government of Alberta; Alberta Justice and Solicitor General'                                                                                                   :['Alberta Justice and Solicitor General', 'ab', '; Justice et Solliciteur général de l\'Alberta','ab','66677'],
-    'Government of Alberta; Alberta Agriculture and Forestry'                                                                                                        :['Alberta Agriculture and Forestry', 'ab', '; Agriculture et foresterie de l\'Alberta','ab','66677'],
+    'Government of Alberta; Government Data'                                                                                                                         :['Government Data', 'ab', '; Données gouvernementales','ab','666773'],
+    'Government of Alberta; Alberta Justice and Solicitor General'                                                                                                   :['Alberta Justice and Solicitor General', 'ab', '; Justice et Solliciteur général de l\'Alberta','ab','666774'],
+    'Government of Alberta; Alberta Agriculture and Forestry'                                                                                                        :['Alberta Agriculture and Forestry', 'ab', '; Agriculture et foresterie de l\'Alberta','ab','666775'],
+    'Government of Alberta; Treasury Board and Finance'                                                                                                              :['Treasury Board and Finance', 'ab', '; Conseil du Trésor et Finances','ab','66678'],
+    'Government of Alberta; Alberta Health'                                                                                                                          :['Alberta Health', 'ab', '; Alberta Health','ab','66679'],
     #############################################
     ## Government of British Columbia Department
     #############################################

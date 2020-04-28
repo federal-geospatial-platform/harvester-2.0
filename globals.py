@@ -11,9 +11,9 @@ RESOURCEFILEPATH = None
 DEVURL = None
 S3BUCKETNAME = None
 S3RESOURCEFILENAME = None
-#OPERATION_ENV = 'production' 
+OPERATION_ENV = 'production' 
 ### or ### 
-OPERATION_ENV = 'staging'
+#OPERATION_ENV = 'staging'
 LOGFILEPATH = "/tmp/harvester/logs"
 FORCEREMOVELOCKFILE = None
 FORCEHARVESTSTART = False
