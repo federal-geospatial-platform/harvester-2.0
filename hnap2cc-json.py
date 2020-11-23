@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Usage: hnap2cc-json.py [-e Error file to generate]
+"""Usage: hnap2cc-json.py [-f xml_file_input] [-e Error file to generate] [-o Output environment]
 
 Convert HNAP 2.3.1 XML from FGP platform CSW v1.6.2 to OGP Portal input
 
@@ -11,15 +11,21 @@ Accepts streamed HNAP xml input or a supplied HNAP xml filename
 
 Options:
     -e Error file to generate
+    -f xml_file_input
+    -o output environment
 """
-
+import errno
+import os
+import shutil
 from ResourceType import ResourceType
 from CL_Formats import CL_Formats
 
 import csv
 from lxml import etree
 import json
-import datetime
+
+from datetime import datetime
+import unicodedata
 
 import urllib2
 from urlparse import urlparse
@@ -34,6 +40,8 @@ import unicodedata
 
 import docopt
 
+import glob
+import argparse
 
 
 MIN_TAG_LENGTH = 1
@@ -51,17 +59,58 @@ error_records = {}
 # input_file     = 'data/majechr_source.xml'
 # input_file     = 'data/hnap_import.xml'
 input_file = None
+records_root = None
+SingleXmlInput = None
+
+parser = argparse.ArgumentParser(description='Process provided XML metadata')
+parser.add_argument('-e', type=str, help='error file to generate')
+parser.add_argument('-f', type=str, help='XML file input')
+parser.add_argument('-o', type=str, help='Output environment')
+args = parser.parse_args()
+OutputEnv = args.o.upper()
+if 'PROD' in OutputEnv:
+    OutputEnv = "JsonOutput-prod"
+elif 'STAG' in OutputEnv:
+    OutputEnv = "JsonOutput-stag"
+else:
+    print "please refer to usage: provide output environment (-o STAGING/PRODUCTION)"
+    sys.exit(3)
+
+def ProcDirCreation():
+    mydir = os.path.join(
+        os.getcwd(), "processed-xml")
+    try:
+        os.makedirs(mydir)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise  # This was not a "directory exist" error..
+
 
 # Use stdin if it's populated
 if not sys.stdin.isatty():
-    #input_file = BytesIO(sys.stdin.read())
-    #DEBUG
-    input_file = open("harvested_records.xml",'r').read().splitlines()
-    #DEBUG END
+    input_file = BytesIO(sys.stdin.read())
+
+    records_root = ("/csw:GetRecordsResponse/"
+                      "csw:SearchResults/"
+                      "gmd:MD_Metadata")
+    # a_string = "A string is more than its more parts!"
+    # matches = ["more", "wholesome", "milk"]
+    # mat = [x for x in matches if x in a_string]
+    # if any(x in a_string for x in matches):
+    #     print x
+    # DEBUG END
 
 # Otherwise, read for a given filename
-if len(sys.argv) == 2:
-    input_file = sys.argv[1]
+elif not args.f == None:
+    input_file = args.f
+    input_file = open(args.f, 'rU').read().splitlines()
+    records_root = ("/gmd:MD_Metadata")
+    SingleXmlInput = True
+else:
+    input_file = open("harvested_records.xml", 'rU').read().splitlines()
+    records_root = ("/csw:GetRecordsResponse/"
+                      "csw:SearchResults/"
+                      "gmd:MD_Metadata")
 
 if input_file is None:
     sys.stdout.write("""
@@ -98,29 +147,42 @@ input_data_blocks.append(active_input_block)
 
 ##################################################
 # Extract the schema to convert to
-schema_file = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps.csv'
+schema_file_ca = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps.csv'
+schema_file_en = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-en.csv'
+schema_file_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-fr.csv'
+schema_file_on = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-on.csv'
+schema_file_ca_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-ca-fr.csv'
+
 schema_ref = {}
-with open(schema_file, 'rb') as f:
-    reader = csv.reader(f)
-    for row in reader:
-        if row[0] == 'Property ID':
-            continue
-        schema_ref[row[0]] = {}
-        schema_ref[row[0]]['Property ID'] = row[0]
-        schema_ref[row[0]]['CKAN API property'] = row[1]
-        schema_ref[row[0]]['Schema Name English'] = unicode(row[2], 'utf-8')
-        schema_ref[row[0]]['Schema Name French'] = unicode(row[3], 'utf-8')
-        schema_ref[row[0]]['Requirement'] = row[4]
-        schema_ref[row[0]]['Occurrences'] = row[5]
-        schema_ref[row[0]]['Reference'] = row[6]
-        schema_ref[row[0]]['Value Type'] = row[7]
-        schema_ref[row[0]]['FGP XPATH'] = unicode(row[8], 'utf-8')
-        schema_ref[row[0]]['RegEx Filter'] = unicode(row[9], 'utf-8')
+schemafile = None
+def loadSchemaConfig(file_in):
+    global  schemafile
+    if schemafile:
+        schemafile.close()
+    with open(file_in, 'rb') as schemafile:
+        reader = csv.reader(schemafile)
+        for row in reader:
+            if row[0] == 'Property ID':
+                continue
+            schema_ref[row[0]] = {}
+            schema_ref[row[0]]['Property ID'] = row[0]
+            schema_ref[row[0]]['CKAN API property'] = row[1]
+            schema_ref[row[0]]['Schema Name English'] = unicode(row[2], 'utf-8')
+            schema_ref[row[0]]['Schema Name French'] = unicode(row[3], 'utf-8')
+            schema_ref[row[0]]['Requirement'] = row[4]
+            schema_ref[row[0]]['Occurrences'] = row[5]
+            schema_ref[row[0]]['Reference'] = row[6]
+            schema_ref[row[0]]['Value Type'] = row[7]
+            schema_ref[row[0]]['FGP XPATH'] = unicode(row[8], 'utf-8')
+            schema_ref[row[0]]['RegEx Filter'] = unicode(row[9], 'utf-8')
+        return schema_ref
+    return {}
 
-
-records_root = ("/csw:GetRecordsResponse/"
-                "csw:SearchResults/"
-                "gmd:MD_Metadata")
+# records_root = ("/csw:GetRecordsResponse/"
+#                 "csw:SearchResults/"
+#                 "gmd:MD_Metadata")
+#
+# records_root = ("gmd:MD_Metadata")
 
 source_hnap = ("csw.open.canada.ca/geonetwork/srv/"
                "csw?service=CSW"
@@ -145,11 +207,172 @@ mappable_protocols = [
 
 iso_time = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
 
+
 def main():
     output_jl = "harvested_records.jl"
     output_err = "harvested_record_errors.csv"
     num_rejects = 0
     num_view_on_map = 0
+
+    OrgNameDict = {
+        "Government of Canada",
+        "Gouvernement du Canada",
+        "Government of Alberta",
+        "Gouvernement de l\'Albeta",
+        "Government of British Columbia",
+        "Gouvernement de la Colombie-Britanique"
+        "Government of New Brunswick",
+        "Gouvernement du Nouveau-Brunswick",
+        "Government of Yukon",
+        "Gouvernement du Yukon",
+        "Government of Quebec",
+        "Gouvernement du Québec",
+        "Government and Municipalities of Quebec",
+		"Government and Municipalities of Québec",
+        "Gouvernement et Municipalités du Québec",
+        "Gouvernement et Municipalités du Quebec",
+        "Quebec Government and Municipalities",
+        "Québec Government and Municipalities",
+        "Government of Ontario",
+        "Gouvernement de l\'Ontario",
+        "Government of Nova Scotia",
+        "Gouvernement de la Nouvelle-Ecosse",
+        "Government of Manitoba",
+        "Gouvernement du Manitoba",
+        "Government of Newfoundland and Labrador",
+        "Gouvernement de Terre-Neuve et Labrador",
+        "Government of Saskatchewan",
+        "Gouvernement de la Saskatchewan",
+        "Government of Northwest Territories",
+        "Gouvernement des Territoires du Nord-Ouest",
+        "Government of Nunavut",
+        "Gouvernement du Nunavut",
+        "Government of Prince Edward Island",
+        "Gouvernement de l'Ile-du-Prince-Edouard"
+    }
+
+    MunicipalDict = {
+        "Ville de Blainville",
+        "City of Blainville",
+        "Ville de Gatineau",
+        "City of Gatineau",
+        "Ville de Laval",
+        "City of Laval",
+        "Ville de Longueuil",
+        "City of Longueuil",
+        "Ville de Montréal",
+        "Ville de Montreal",
+        "City of Montreal",
+        "City of Montréal",
+        "Ville de Quebec",
+        "Ville de Québec",
+        "City of Quebec",
+        "City of Québec",
+        "Ville de Repentigny",
+        "City of Repentigny",
+        "Ville de Rimouski",
+        "City of Rimouski",
+        "Ville de Rouyn-Noranda",
+        "City of Rouyn-Noranda",
+        "Ville de Shawinigan",
+        "City of Shawinigan",
+        "Ville de Sherbrooke",
+        "City of Sherbrooke",
+        "Ville de Sherbrooke;Sherbrooke Données ouvertes",
+        "Ville de Sherbrooke;Données géomatiques",
+        "Ville de Montréal;Bixi-Montréal",
+        "Ville de Montréal;Bureau du taxi de Montréal",
+        "Ville de Sherbrooke;Commercer Sherbrooke",
+        "Ville de Sherbrooke;Destination Sherbrooke",
+        "Ville de Québec;Le Réseau de transport de la Capitale",
+        "Ville de Laval;Société de transport de Laval",
+        "Ville de Montréal;Société de transport de Montréal",
+        "Ville de Sherbrooke;Société de transport de Sherbrooke",
+        "Ville de Montréal;Société des célébrations du 375e anniversaire de Montréal",
+        "Ville de Montréal;Stationnement de Montréal",
+        "Ville de Sherbrooke;ZAP Sherbrooke",
+        "not-found"
+        }
+
+    OrgNameDictSecondLang = {
+        "Government of Canada" : "Gouvernement du Canada",
+        "Gouvernement du Canada" : "Government of Canada",
+        "Government of Alberta" : "Gouvernement de l\'Alberta",
+        "Gouvernement de l\'Alberta" : "Government of Alberta",
+        "Government of British Columbia" : "Gouvernement de la Colombie-Britannique",
+        "Gouvernement de la Colombie-Britannique" : "Government of British Columbia",
+        "Government of New Brunswick" : "Gouvernement du Nouveau-Brunswick",
+        "Gouvernement du Nouveau-Brunswick" : "Government of New Brunswick",
+        "Government of Yukon" : "Gouvernement du Yukon",
+        "Gouvernement du Yukon" : "Government of Yukon",
+        "Government of Québec": "Gouvernement du Québec",
+        "Government of Quebec" : "Gouvernement du Québec",
+        "Gouvernement du Québec" : "Government of Quebec",
+        "Gouvernement du Quebec": "Government of Quebec",
+        "Government and Municipalities of Québec" : "Gouvernement et Municipalités du Québec",
+        "Gouvernement et Municipalités du Québec" : "Government and Municipalities of Québec",
+        "Government and Municipalities of Quebec": "Gouvernement et Municipalités du Québec",
+        "Gouvernement et Municipalités du Quebec": "Government and Municipalities of Québec",
+        "Quebec Government and Municipalities" : "Gouvernement et Municipalités du Québec",
+        "Québec Government and Municipalities" : "Gouvernement et Municipalités du Québec",
+        "Government of Ontario" : "Gouvernement de l'Ontario",
+        "Gouvernement de l'Ontario" : "Government of Ontario",
+        "Government of Nova Scotia" : "Gouvernement de la Nouvelle-Ecosse",
+        "Gouvernement de la Nouvelle-Ecosse" : "Government of Nova Scotia",
+        "Government of Manitoba" : "Gouvernement du Manitoba",
+        "Gouvernement du Manitoba" : "Government of Manitoba",
+        "Government of Newfoundland and Labrador" : "Gouvernement de Terre-Neuve et Labrador",
+        "Gouvernement de Terre-Neuve et Labrador" : "Government of Newfoundland and Labrador",
+        "Government of Saskatchewan" : "Gouvernement de la Saskatchewan",
+        "Gouvernement de la Saskatchewan" : "Government of Saskatchewan",
+        "Government of Northwest Territories" : "Gouvernement des Territoires du Nord-Ouest",
+        "Gouvernement des Territoires du Nord-Ouest" : "Government of Northwest Territories",
+        "Government of Nunavut" : "Gouvernement du Nunavut",
+        "Gouvernement du Nunavut" : "Government of Nunavut",
+        "Government of Prince Edward Island" : "Gouvernement de l'Île-du-Prince-Édouard",
+        "Gouvernement de l'Île-du-Prince-Édouard" : "Government of Prince Edward Island"
+    }
+
+    licencekey = {
+        "Government of Canada" : "64",
+        "Gouvernement du Canada" : "64",
+        "Government of Alberta" : "64ab",
+        "Gouvernement du Canada" : "64ab",
+        "Government of British Columbia" : "64bc",
+        "Gouvernement de la Colombie-Britannique" : "64bc",
+        "Government of New Brunswick" : "64nb",
+        "Gouvernement du Nouveau-Brunswick" : "64nb",
+        "Government of Yukon" : "64yk",
+        "Gouvernement du Yukon" : "64yk",
+        "Government of Quebec" : "64qc",
+        "Gouvernement du Québec" : "64qc",
+        "Gouvernement et Municipalités du Québec" : "64qc",
+        "Government and Municipalities of Québec" : "64qc",
+        "Government of Québec": "64qc",
+        "Gouvernement du Quebec": "64qc",
+        "Gouvernement et Municipalités du Quebec": "64qc",
+        "Government and Municipalities of Quebec": "64qc",
+        "Quebec Government and Municipalities": "64qc",
+        "Québec Government and Municipalities": "64qc",
+        "Government of Ontario" : "64on",
+        "Gouvernement de l'Ontario" : "64on",
+        "Government of Nova Scotia" : "64ns",
+        "Gouvernement de la Nouvelle-Ecosse" : "64ns",
+        "Government of Manitoba" : "64mnb",
+        "Gouvernement du Manitoba" : "64mnb",
+        "Government of Newfoundland and Labrador" : "64nfl",
+        "Gouvernement de Terre-Neuve et Labrador" : "64nfl",
+        "Government of Saskatchewan" : "64sa",
+        "Gouvernement de la Saskatchewan" : "64sa",
+        "Government of Northwest Territories" : "64nwt",
+        "Gouvernement des Territoires du Nord-Ouest" : "64nwt",
+        "Government of Nunavut" : "64nnvt",
+        "Gouvernement du Nunavut" : "64nnvt",
+        "Government of Prince Edward Island" : "64pei",
+        "Gouvernement de l'Île-du-Prince-Édouard" : "64pei"
+    }
+
+    #schema_ref = loadSchemaConfig(schema_file_en)
 
     # Is there a specified start date
     if arguments['-e']:
@@ -168,16 +391,43 @@ def main():
         # Parse the root and iterate over each record
         records = fetchXMLArray(root, records_root)
 
+###############################################
+###############################################
         for record in records:
             json_record = {}
             can_be_used_in_RAMP = False
             json_record['display_flags'] = []
+            schema_ref = loadSchemaConfig(schema_file_en)
+            ##################################################
+            # HNAP CORE LANGUAGE
+            ##################################################
+            # Language is required, the rest can't be processed
+            # for errors if the primary language is not certain
+            ReadOrgName = fetchXMLValues(record, schema_ref["06a"]['FGP XPATH'])[0]
+            fetch_nunicipalname = [x for x in MunicipalDict if unicode(x.lower(), 'UTF-8') in ReadOrgName.lower()]
+            ReadOrgName = ReadOrgName.split(';')[0]
+            QcgovData1 = unicode('québec'.lower(), 'utf-8')
+            QcgovData2 = unicode('quebec'.lower(), 'utf-8')
+            CangovData = unicode('Canada'.lower(), 'utf-8')
+            OngovData = unicode('Ontario'.lower(), 'utf-8')
 
-##################################################
-# HNAP CORE LANGUAGE
-##################################################
-# Language is required, the rest can't be processed
-# for errors if the primary language is not certain
+
+
+            if QcgovData1 in ReadOrgName.lower():
+                schema_ref = {}
+                schema_ref = loadSchemaConfig(schema_file_fr)
+            if QcgovData2 in ReadOrgName.lower():
+                schema_ref = {}
+                schema_ref = loadSchemaConfig(schema_file_fr)
+            elif CangovData in ReadOrgName.lower():
+                schema_ref = {}
+                schema_ref = loadSchemaConfig(schema_file_ca)
+            elif OngovData in ReadOrgName.lower():
+                schema_ref = {}
+                schema_ref = loadSchemaConfig(schema_file_on)
+            else:
+                schema_ref = {}
+                schema_ref = loadSchemaConfig(schema_file_en)
 
             tmp = fetchXMLValues(record, schema_ref["12"]['FGP XPATH'])
             if sanitySingle('NOID', ['HNAP Priamry Language'], tmp) is False:
@@ -190,55 +440,58 @@ def main():
                     HNAP_primary_lang = 'English'
                     HNAP_secondary_lang = 'French'
                 else:
-                    CKAN_primary_lang = 'fr'
-                    CKAN_secondary_lang = 'en'
-                    HNAP_primary_lang = 'French'
-                    HNAP_secondary_lang = 'English'
+                    schema_ref = {}
+                    schema_ref = loadSchemaConfig(schema_file_ca_fr)
+                    CKAN_secondary_lang = 'fr'
+                    CKAN_primary_lang = 'en'
+                    HNAP_secondary_lang = 'French'
+                    HNAP_primary_lang = 'English'
+                    HNAP_primary_language = 'eng'
 
-##################################################
-# Catalogue Metadata
-##################################################
+            ##################################################
+            # Catalogue Metadata
+            ##################################################
 
-# CC::OpenMaps-01 Catalogue Type
+            # CC::OpenMaps-01 Catalogue Type
             json_record[schema_ref["01"]['CKAN API property']] = 'dataset'
-# CC::OpenMaps-02 Collection Type
+            # CC::OpenMaps-02 Collection Type
             json_record[schema_ref["02"]['CKAN API property']] = 'fgp'
-# CC::OpenMaps-03 Metadata Scheme
-#       CKAN defined/provided
-# CC::OpenMaps-04 Metadata Scheme Version
-#       CKAN defined/provided
-# CC::OpenMaps-05 Metadata Record Identifier
+            # CC::OpenMaps-03 Metadata Scheme
+            #       CKAN defined/provided
+            # CC::OpenMaps-04 Metadata Scheme Version
+            #       CKAN defined/provided
+            # CC::OpenMaps-05 Metadata Record Identifier
             tmp = fetchXMLValues(record, schema_ref["05"]['FGP XPATH'])
             if str(tmp) == "[\'5c252e65-1446-425c-84c3-753ebfdc8b77\']":
                 if sanitySingle('NOID', ['fileIdentifier'], tmp) is False:
                     HNAP_fileIdentifier = False
                 else:
-                    json_record[schema_ref["05"]['CKAN API property']] =\
-                    HNAP_fileIdentifier =\
-                    sanityFirst(tmp)
+                    json_record[schema_ref["05"]['CKAN API property']] = \
+                        HNAP_fileIdentifier = \
+                        sanityFirst(tmp)
             else:
                 if sanitySingle('NOID', ['fileIdentifier'], tmp) is False:
                     HNAP_fileIdentifier = False
                 else:
-                    json_record[schema_ref["05"]['CKAN API property']] =\
-                    HNAP_fileIdentifier =\
-                    sanityFirst(tmp)
+                    json_record[schema_ref["05"]['CKAN API property']] = \
+                        HNAP_fileIdentifier = \
+                        sanityFirst(tmp)
 
-##################################################
-# Point of no return
-# fail out if you don't have either a primary language or ID
-##################################################
+            ##################################################
+            # Point of no return
+            # fail out if you don't have either a primary language or ID
+            ##################################################
 
             if HNAP_primary_language is False or HNAP_fileIdentifier is False:
                 break
 
-# From here on in continue if you can and collect as many errors as
-# possible for FGP Help desk.  We awant to have a full report of issues
-# to correct, not piecemeal errors.
-# It's faster for them to correct a batch of errors in parallel as
-# opposed to doing them piecemeal.
+            # From here on in continue if you can and collect as many errors as
+            # possible for FGP Help desk.  We awant to have a full report of issues
+            # to correct, not piecemeal errors.
+            # It's faster for them to correct a batch of errors in parallel as
+            # opposed to doing them piecemeal.
 
-# CC::OpenMaps-06 Metadata Contact (English)
+            # CC::OpenMaps-06 Metadata Contact (English)
             primary_vals = []
             # organizationName
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["06a"])
@@ -261,7 +514,7 @@ def main():
                 schema_ref["06"]['CKAN API property']
             ][CKAN_primary_lang] = ','.join(primary_vals)
 
-# CC::OpenMaps-07 Metadata Contact (French)
+            # CC::OpenMaps-07 Metadata Contact (French)
             second_vals = []
 
             # organizationName
@@ -284,21 +537,21 @@ def main():
                 schema_ref["06"]['CKAN API property']
             ][CKAN_secondary_lang] = ','.join(second_vals)
 
-# CC::OpenMaps-08 Source Metadata Record Date Stamp
+            # CC::OpenMaps-08 Source Metadata Record Date Stamp
             tmp = fetchXMLValues(record, schema_ref["08a"]['FGP XPATH'])
             values = list(set(tmp))
             if len(values) < 1:
                 tmp = fetchXMLValues(record, schema_ref["08b"]['FGP XPATH'])
 
             if sanityMandatory(
-                HNAP_fileIdentifier,
-                [schema_ref["08"]['CKAN API property']],
-                tmp
-            ):
-                if sanitySingle(
                     HNAP_fileIdentifier,
                     [schema_ref["08"]['CKAN API property']],
                     tmp
+            ):
+                if sanitySingle(
+                        HNAP_fileIdentifier,
+                        [schema_ref["08"]['CKAN API property']],
+                        tmp
                 ):
                     # Might be a iso datetime
                     date_str = sanityFirst(tmp)
@@ -309,53 +562,57 @@ def main():
                             HNAP_fileIdentifier,
                             [schema_ref["08"]['CKAN API property']],
                             date_str):
-                        json_record[schema_ref["08"]['CKAN API property']] =\
+                        json_record[schema_ref["08"]['CKAN API property']] = \
                             date_str
 
-# CC::OpenMaps-09 Metadata Contact (French)
+            # CC::OpenMaps-09 Metadata Contact (French)
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["09"])
             if value:
                 json_record[schema_ref["09"]['CKAN API property']] = value
 
-# CC::OpenMaps-10 Parent identifier
+            # CC::OpenMaps-10 Parent identifier
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["10"])
             if value:
                 json_record[schema_ref["10"]['CKAN API property']] = value
 
-# CC::OpenMaps-11 Hierarchy level
+            # CC::OpenMaps-11 Hierarchy level
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["11"])
             if value:
                 json_record[schema_ref["11"]['CKAN API property']] = value
 
-# CC::OpenMaps-12 File Identifier
+            # CC::OpenMaps-12 File Identifier
 
-            json_record[schema_ref["12"]['CKAN API property']] =\
+            json_record[schema_ref["12"]['CKAN API property']] = \
                 HNAP_fileIdentifier
 
-# CC::OpenMaps-13 Short Key
+            # CC::OpenMaps-13 Short Key
 
             # Disabled as per the current install of RAMP
             # json_record[schema_ref["13"]
             # ['CKAN API property']] = HNAP_fileIdentifier[0:8]
 
-# CC::OpenMaps-14 Title (English)
+            # CC::OpenMaps-14 Title (English)
             json_record[schema_ref["14"]['CKAN API property']] = {}
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["14"])
-            if value:
-                json_record[
-                    schema_ref["14"]['CKAN API property']
-                ][CKAN_primary_lang] = value
-# CC::OpenMaps-15 Title (French)
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["15"])
-            if value:
-                json_record[
-                    schema_ref["14"]['CKAN API property']
-                ][CKAN_secondary_lang] = value
 
-# CC::OpenMaps-16 Publisher - Current Organization Name
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["14a"])
+            if value:
+                json_record[
+                    schema_ref["14"]['CKAN API property']
+                ][schema_ref["14a"]['CKAN API property'].split('.')[1]] = value
+            # CC::OpenMaps-15 Title (French)
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["14b"])
+
+            # CKAN_secondary_lang = langtrans  ##2lang trans
+
+            if value:
+                json_record[
+                    schema_ref["14"]['CKAN API property']
+                ][schema_ref["14b"]['CKAN API property'].split('.')[1]] = value
+
+            # CC::OpenMaps-16 Publisher - Current Organization Name
 
             org_strings = []
             org_string = ''
@@ -363,38 +620,63 @@ def main():
             bcstring = ''
             attempt = ''
 
-            if HNAP_primary_lang == 'English':
-                primary_lang_search_string = "^Government of Canada;"
-                secondary_lang_search_string = "^Government du Canada;"
-                Primary_org_list = GC_Registry_of_Organization_en
-                secondary_org_list = GC_Registry_of_Organization_fr
-                bcstring = 'government of british columbia'
-                abstring = 'government of alberta'
-            else:
-                Primary_org_list = GC_Registry_of_Organization_fr
-                secondary_org_list = GC_Registry_of_Organization_en
-                primary_lang_search_string = "^Government du Canada;"
-                secondary_lang_search_string = "^Government of Canada;"
-                bcstring = 'Gouvernement de la Colombie-Britannique'
-                abstring = 'Gouvernement de l\'Alberta'
-
-
             value = fetch_FGP_value(
                 record, HNAP_fileIdentifier, schema_ref["16a"])
             value[0] = value[0].split(',')[0]
+            if not 'government of canada' in value[0].lower():
+                value[0] = value[0].split(';')[0]
+
+            if isinstance(value[0], unicode):
+                value[0] = value[0]
+
+
+            fetch_orgname = [x for x in OrgNameDict if unicode(x.lower(),'UTF-8') in value[0].lower()]
+
+            orgname = ""
+            org_name = ""
+            Primary_org_list = []
+            secondary_lang_search_string = ""
+            if len(fetch_orgname)>0:
+                orgname = fetch_orgname[0]
+                if HNAP_primary_lang == 'English':
+                    primary_lang_search_string = ""+ orgname+";" # Government of Canada;"
+                    secondary_lang_search_string = "" + OrgNameDictSecondLang[orgname]+";" #Gouvernement du Canada;"
+                    Primary_org_list = GC_Registry_of_Organization_en
+                    secondary_org_list = GC_Registry_of_Organization_fr
+                else:
+                    Primary_org_list = GC_Registry_of_Organization_fr
+                    secondary_org_list = GC_Registry_of_Organization_en
+                    primary_lang_search_string =  "" + orgname +";" #Gouvernement du Canada;"
+                    secondary_lang_search_string = ""+ OrgNameDictSecondLang[orgname] +";" # Government of Canada;"
+
+
+
+
+            # value = fetch_FGP_value(
+            #     record, HNAP_fileIdentifier, schema_ref["16a"])
+            # value[0] = value[0].split(',')[0]
             if not value or len(value) < 1:
                 attempt += "No primary language value"
             else:
-                attempt += "Has primary language value ["+str(len(value))+"]"
+                attempt += "Has primary language value [" + str(len(value)) + "]"
                 for single_value in value:
                     orgnamefound = False
                     for org_name in Primary_org_list:
-                        if re.search(org_name, single_value):
-                            org_strings.append(single_value)
-                            orgnamefound = True
-                            break
+                        try:
+                            if re.search(unicode(org_name, "UTF-8"), single_value):
+                                org_strings.append(single_value)
+                                orgnamefound = True
+                                break
+                            elif single_value in unicode(org_name, "UTF-8"):
+                                org_strings.append(single_value)
+                                orgnamefound = True
+                                break
+                        except:
+                            print("An exception occurred")
+
+
                     if not orgnamefound:
-                        attempt += " but no GoC/GdC prefix ["+single_value+"]"
+                        attempt += " but no GoC/GdC prefix [" + single_value + "]"
 
             value = fetch_FGP_value(
                 record, HNAP_fileIdentifier, schema_ref["16b"])
@@ -402,12 +684,14 @@ def main():
             if not value or len(value) < 1:
                 attempt += ", no secondary language value"
             else:
-                attempt += ", secondary language ["+str(len(value))+"]"
+                attempt += ", secondary language [" + str(len(value)) + "]"
                 for single_value in value:
-                    if re.search(secondary_lang_search_string, single_value):
-                        org_strings.append(single_value)
+                    if re.search(secondary_lang_search_string.lower(), single_value.lower().encode("UTF-8")):
+                        org_strings.append(single_value.encode("UTF-8"))
                     else:
-                        attempt += " but no GoC/GdC ["+single_value+"]"
+                        attempt += " but no GoC/GdC [" + single_value + "]"
+
+            org_strings = list(set(org_strings))
 
             if len(org_strings) < 1:
                 reportError(
@@ -418,17 +702,18 @@ def main():
                     ])
             else:
                 valid_orgs = []
-                curorgname  =[]
+                curorgname = []
 
                 for org_string in org_strings:
                     provdata = False
-                    GOC_Structure = org_string.strip().split(';') ##revisite
-                    if GOC_Structure[0].lower()==bcstring.lower() or GOC_Structure[0].lower()==abstring.lower():
-                        del GOC_Structure[0]
-                        provdata = True
-                        curorgname = GOC_Structure[0]
-
-                    del GOC_Structure[0]
+                    GOC_Structure = org_string.strip().split(';')  ##revisite
+                    #fetch_orgname = [x for x in OrgNameDict if x in GOC_Structure[0].lower()][0] ############  ##############
+                    # if GOC_Structure[0].lower() == orgname ##bcstring.lower() or GOC_Structure[0].lower() == abstring.lower():
+                    #     del GOC_Structure[0]
+                    #     provdata = True
+                    #     curorgname = GOC_Structure[0]
+                    #
+                    # del GOC_Structure[0]
 
                     # Append to contributor
                     contributor_english = []
@@ -438,17 +723,15 @@ def main():
                     # dept names
                     for GOC_Div in GOC_Structure:
                         # Are they in the CL?
-                        if provdata:
-                            GOC_Div = curorgname.strip() + '; ' + GOC_Div.strip()
-                        termsValue = fetchCLValue(
-                            GOC_Div, GC_Registry_of_Applied_Terms)
+                        GOC_Div = GOC_Structure[0].strip() + '; ' + GOC_Div.strip()
+                        termsValue = fetchCLValue( GOC_Div, GC_Registry_of_Applied_Terms)
                         if termsValue:
                             contributor_english.append(termsValue[0])
                             contributor_french.append(termsValue[2])
                             if termsValue[1] == termsValue[3]:
                                 valid_orgs.append(termsValue[1].lower())
                             else:
-                                valid_orgs.append((termsValue[1]+"-"+termsValue[3]).lower())
+                                valid_orgs.append((termsValue[1] + "-" + termsValue[3]).lower())
                             break
 
                 # Unique the departments, don't need duplicates
@@ -471,8 +754,10 @@ def main():
                 # Multiple owners, excess pushed to contrib
                 if len(valid_orgs) > 1:
                     del valid_orgs[0]
-                    del contributor_english[0]
-                    del contributor_french[0]
+                    if len(contributor_english) > 0:
+                        del contributor_english[0]
+                    if len(contributor_english) > 0:
+                        del contributor_french[0]
                     json_record[schema_ref["22"]['CKAN API property']] = {}
                     json_record[schema_ref["22"]['CKAN API property']]['en'] = []
                     json_record[schema_ref["22"]['CKAN API property']]['fr'] = []
@@ -480,28 +765,28 @@ def main():
                         json_record[schema_ref["22"]['CKAN API property']]['en'] = ','.join(contributor_english)
                         json_record[schema_ref["22"]['CKAN API property']]['fr'] = ','.join(contributor_french)
 
-# CC::OpenMaps-17 Publisher - Organization Name at Publication (English)
-#       CKAN defined/provided
-# CC::OpenMaps-18 Publisher - Organization Name at Publication (French)
-#       CKAN defined/provided
-# CC::OpenMaps-19 Publisher - Organization Section Name (English)
-#       CKAN defined/provided
-# CC::OpenMaps-20 Publisher - Organization Section Name (French)
-#       CKAN defined/provided
+            # CC::OpenMaps-17 Publisher - Organization Name at Publication (English)
+            #       CKAN defined/provided
+            # CC::OpenMaps-18 Publisher - Organization Name at Publication (French)
+            #       CKAN defined/provided
+            # CC::OpenMaps-19 Publisher - Organization Section Name (English)
+            #       CKAN defined/provided
+            # CC::OpenMaps-20 Publisher - Organization Section Name (French)
+            #       CKAN defined/provided
 
-# CC::OpenMaps-21 Creator
+            # CC::OpenMaps-21 Creator
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["21"])
             if value:
                 json_record[schema_ref["21"]['CKAN API property']] = ','.join(value)
 
-# CC::OpenMaps-22 Contributor (English)
-#       Intentionally left blank, assuming singular contribution
-# CC::OpenMaps-23 Contributor (French)
-#       Intentionally left blank, assuming singular contribution
+            # CC::OpenMaps-22 Contributor (English)
+            #       Intentionally left blank, assuming singular contribution
+            # CC::OpenMaps-23 Contributor (French)
+            #       Intentionally left blank, assuming singular contribution
 
-# CC::OpenMaps-24 Position Name (English)
-# CC::OpenMaps-25 Position Name (French)
+            # CC::OpenMaps-24 Position Name (English)
+            # CC::OpenMaps-25 Position Name (French)
 
             json_record[schema_ref["24"]['CKAN API property']] = {}
 
@@ -528,7 +813,7 @@ def main():
             if len(json_record[schema_ref["24"]['CKAN API property']]) < 1:
                 del json_record[schema_ref["24"]['CKAN API property']]
 
-# CC::OpenMaps-26 Role
+            # CC::OpenMaps-26 Role
 
             # Single report out, multiple records combined
             schema_ref["26"]['Occurrences'] = 'R'
@@ -542,7 +827,7 @@ def main():
                         reportError(
                             HNAP_fileIdentifier, [
                                 schema_ref["26"]['CKAN API property'],
-                                'Value not found in '+schema_ref["26"]['Reference']
+                                'Value not found in ' + schema_ref["26"]['Reference']
                             ])
                     else:
                         primary_data.append(termsValue[0])
@@ -550,18 +835,19 @@ def main():
             if len(primary_data) > 0:
                 json_record[schema_ref["26"]['CKAN API property']] = ','.join(value)
 
-# CC::OpenMaps-27
-#       Undefined property number
-# CC::OpenMaps-28
-#       Undefined property number
+            # CC::OpenMaps-27
+            #       Undefined property number
+            # CC::OpenMaps-28
+            #       Undefined property number
 
-# CC::OpenMaps-29 Contact Information (English)
+            # CC::OpenMaps-29 Contact Information (English)
 
             primary_vals = {}
             primary_vals[CKAN_primary_lang] = {}
 
             # HACK - find out of there is a pointOfContact role provided
-            ref = schema_ref["29a"]["FGP XPATH"].split("gmd:CI_ResponsibleParty")[0] + "gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode[@codeListValue='RI_414']]"
+            ref = schema_ref["29a"]["FGP XPATH"].split("gmd:CI_ResponsibleParty")[
+                      0] + "gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode[@codeListValue='RI_414']]"
             tmp = fetchXMLValues(record, ref)
             xpath_sub = ""
 
@@ -570,42 +856,78 @@ def main():
 
             # deliveryPoint
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["29a"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29a"]['Requirement'], "Occurrences": schema_ref["29a"]['Occurrences'],"FGP XPATH": schema_ref["29a"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["29a"]['Value Type'], "CKAN API property": schema_ref["29a"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29a"]['Requirement'],
+                                                                  "Occurrences": schema_ref["29a"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["29a"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["29a"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["29a"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
                     primary_vals[CKAN_primary_lang]['delivery_point'] = single_value
             # city
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["29b"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29b"]['Requirement'], "Occurrences": schema_ref["29b"]['Occurrences'],"FGP XPATH": schema_ref["29b"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["29b"]['Value Type'], "CKAN API property": schema_ref["29b"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29b"]['Requirement'],
+                                                                  "Occurrences": schema_ref["29b"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["29b"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["29b"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["29b"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
                     primary_vals[CKAN_primary_lang]['city'] = single_value
             # administrativeArea
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["29c"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29c"]['Requirement'], "Occurrences": schema_ref["29c"]['Occurrences'],"FGP XPATH": schema_ref["29c"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["29c"]['Value Type'], "CKAN API property": schema_ref["29c"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29c"]['Requirement'],
+                                                                  "Occurrences": schema_ref["29c"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["29c"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["29c"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["29c"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
                     primary_vals[CKAN_primary_lang]['administrative_area'] = single_value
             # postalCode
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["29d"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29d"]['Requirement'], "Occurrences": schema_ref["29d"]['Occurrences'],"FGP XPATH": schema_ref["29d"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["29d"]['Value Type'], "CKAN API property": schema_ref["29d"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29d"]['Requirement'],
+                                                                  "Occurrences": schema_ref["29d"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["29d"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["29d"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["29d"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
                     primary_vals[CKAN_primary_lang]['postal_code'] = single_value
             # country
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["29e"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29e"]['Requirement'], "Occurrences": schema_ref["29e"]['Occurrences'],"FGP XPATH": schema_ref["29e"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["29e"]['Value Type'], "CKAN API property": schema_ref["29e"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29e"]['Requirement'],
+                                                                  "Occurrences": schema_ref["29e"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["29e"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["29e"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["29e"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
                     primary_vals[CKAN_primary_lang]['country'] = single_value
             # electronicMailAddress
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["29f"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29f"]['Requirement'], "Occurrences": schema_ref["29f"]['Occurrences'],"FGP XPATH": schema_ref["29f"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["29f"]['Value Type'], "CKAN API property": schema_ref["29f"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["29f"]['Requirement'],
+                                                                  "Occurrences": schema_ref["29f"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["29f"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["29f"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["29f"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
@@ -615,73 +937,110 @@ def main():
                 reportError(
                     HNAP_fileIdentifier, [
                         schema_ref["29"]['CKAN API property'],
-                        'Value not found in '+schema_ref["29"]['Reference']
+                        'Value not found in ' + schema_ref["29"]['Reference']
                     ])
 
-# CC::OpenMaps-30 Contact Information (French)
+            # CC::OpenMaps-30 Contact Information (French)
 
             primary_vals[CKAN_secondary_lang] = {}
 
             # deliveryPoint
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["30a"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30a"]['Requirement'], "Occurrences": schema_ref["30a"]['Occurrences'],"FGP XPATH": schema_ref["30a"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["30a"]['Value Type'], "CKAN API property": schema_ref["30a"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30a"]['Requirement'],
+                                                                  "Occurrences": schema_ref["30a"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["30a"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["30a"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["30a"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['delivery_point'] = single_value
+                    primary_vals[CKAN_secondary_lang]['point_de_livraison'] = single_value
             # city
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["30b"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30b"]['Requirement'], "Occurrences": schema_ref["30b"]['Occurrences'],"FGP XPATH": schema_ref["30b"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["30b"]['Value Type'], "CKAN API property": schema_ref["30b"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30b"]['Requirement'],
+                                                                  "Occurrences": schema_ref["30b"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["30b"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["30b"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["30b"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['city'] = single_value
+                    primary_vals[CKAN_secondary_lang]['ville'] = single_value
             # administrativeArea
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["30c"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30c"]['Requirement'], "Occurrences": schema_ref["30c"]['Occurrences'],"FGP XPATH": schema_ref["30c"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["30c"]['Value Type'], "CKAN API property": schema_ref["30c"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30c"]['Requirement'],
+                                                                  "Occurrences": schema_ref["30c"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["30c"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["30c"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["30c"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['administrative_area'] = single_value
+                    primary_vals[CKAN_secondary_lang]['zone_administrative'] = single_value
             # postalCode
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["30d"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30d"]['Requirement'], "Occurrences": schema_ref["30d"]['Occurrences'],"FGP XPATH": schema_ref["30d"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["30d"]['Value Type'], "CKAN API property": schema_ref["30d"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30d"]['Requirement'],
+                                                                  "Occurrences": schema_ref["30d"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["30d"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["30d"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["30d"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['postal_code'] = single_value
+                    primary_vals[CKAN_secondary_lang]['code_postal'] = single_value
             # country
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["30e"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30e"]['Requirement'], "Occurrences": schema_ref["30e"]['Occurrences'],"FGP XPATH": schema_ref["30e"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["30e"]['Value Type'], "CKAN API property": schema_ref["30e"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30e"]['Requirement'],
+                                                                  "Occurrences": schema_ref["30e"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["30e"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["30e"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["30e"][
+                                                                      'CKAN API property']})
 
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['country'] = single_value
+                    primary_vals[CKAN_secondary_lang]['pays'] = single_value
             # electronicMailAddress
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["30f"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30f"]['Requirement'], "Occurrences": schema_ref["30f"]['Occurrences'],"FGP XPATH": schema_ref["30f"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["30f"]['Value Type'], "CKAN API property": schema_ref["30f"]['CKAN API property']})
-            
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["30f"]['Requirement'],
+                                                                  "Occurrences": schema_ref["30f"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["30f"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["30f"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["30f"][
+                                                                      'CKAN API property']})
+
             if value:
                 for single_value in value:
                     primary_vals[CKAN_secondary_lang]['electronic_mail_address'] = single_value
 
             if len(primary_vals[CKAN_secondary_lang]) < 1:
                 reportError(
-                    HNAP_fileIdentifier,[
+                    HNAP_fileIdentifier, [
                         schema_ref["30"]['CKAN API property'],
-                        'Value not found in '+schema_ref["30"]['Reference']
+                        'Value not found in ' + schema_ref["30"]['Reference']
                     ])
 
             json_record[schema_ref["29"]['CKAN API property']] = json.dumps(primary_vals)
 
-# CC::OpenMaps-31 Contact Email
+            # CC::OpenMaps-31 Contact Email
 
             # Single report out, multiple records combined
             schema_ref["31"]['Occurrences'] = 'R'
             json_record[schema_ref["31"]['CKAN API property']] = {}
 
             # HACK - find out of there is a pointOfContact role provided
-            ref = schema_ref["31"]["FGP XPATH"].split("gmd:CI_ResponsibleParty")[0] + "gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode[@codeListValue='RI_414']]"
+            ref = schema_ref["31"]["FGP XPATH"].split("gmd:CI_ResponsibleParty")[
+                      0] + "gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode[@codeListValue='RI_414']]"
             tmp = fetchXMLValues(record, ref)
             xpath_sub = ""
 
@@ -689,7 +1048,13 @@ def main():
                 xpath_sub = "gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode[@codeListValue='RI_414']]"
 
             # value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["31"])
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["31"]['Requirement'], "Occurrences": schema_ref["31"]['Occurrences'],"FGP XPATH": schema_ref["31"]["FGP XPATH"].replace("gmd:CI_ResponsibleParty", xpath_sub), "Value Type": schema_ref["31"]['Value Type'], "CKAN API property": schema_ref["31"]['CKAN API property']})
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, {"Requirement": schema_ref["31"]['Requirement'],
+                                                                  "Occurrences": schema_ref["31"]['Occurrences'],
+                                                                  "FGP XPATH": schema_ref["31"]["FGP XPATH"].replace(
+                                                                      "gmd:CI_ResponsibleParty", xpath_sub),
+                                                                  "Value Type": schema_ref["31"]['Value Type'],
+                                                                  "CKAN API property": schema_ref["31"][
+                                                                      'CKAN API property']})
 
             # primary_data = []
             # if value:
@@ -701,11 +1066,11 @@ def main():
 
             # Check for valid email
             if value:
-                value = value[0].split(',') #revisite
+                value = value[0].split(',')  # revisite
                 isprovemail = False
                 for email in value:
                     isValidEmail = re.match(r'(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)', email.strip())
-                if  not isprovemail and isValidEmail == None:
+                if not isprovemail and isValidEmail == None:
 
                     reportError(
                         HNAP_fileIdentifier, [
@@ -723,139 +1088,142 @@ def main():
                         ''
                     ])
 
-
-# CC::OpenMaps-32 Description (English)
+            # CC::OpenMaps-32 Description (English)
 
             json_record[schema_ref["32"]['CKAN API property']] = {}
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["32"])
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["32a"])
             value_old = value
             if value:
-
                 # format line breaks
                 value = value.replace('\n', '  \n  \n  ')
-                value = value.replace('----------------------------------------------------------','  \n  \n  ----------------------------------------------------------  \n  \n  ')
+                value = value.replace('----------------------------------------------------------',
+                                      '  \n  \n  ----------------------------------------------------------  \n  \n  ')
 
                 json_record[
                     schema_ref["32"]['CKAN API property']
-                ][CKAN_primary_lang] = value
+                ][schema_ref["32a"]['CKAN API property'].split('.')[1]] = value
 
             # XXX Check that there are values
 
-# CC::OpenMaps-33 Description (French)
+            # CC::OpenMaps-33 Description (French)
 
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["33"])
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["32b"])
             value_old = value
             if value:
-
                 # format line breaks
                 value = value.replace('\n', '  \n  \n  ')
-                value = value.replace('----------------------------------------------------------','\n----------------------------------------------------------\n')
-
+                value = value.replace('----------------------------------------------------------',
+                                      '  \n  \n  ----------------------------------------------------------  \n  \n  ')
+                                      
                 json_record[
                     schema_ref["32"]['CKAN API property']
-                ][CKAN_secondary_lang] = value
+                ][schema_ref["32b"]['CKAN API property'].split('.')[1]] = value
 
             # XXX Check that there are values
 
-# CC::OpenMaps-34 Keywords (English)
+            # CC::OpenMaps-34 Keywords (English)
 
             primary_vals = []
             json_record[schema_ref["34"]['CKAN API property']] = {}
-            json_record[schema_ref["34"]['CKAN API property']][CKAN_primary_lang] = []
+            json_record[schema_ref["34"]['CKAN API property']][schema_ref["34a"]['CKAN API property'].split('.')[1]] = []
 
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["34"])
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["34a"])
             if value:
                 for single_value in value:
                     p = re.compile('^[A-Z][A-Z] [^>]+ > ')
                     single_value = p.sub('', single_value)
                     single_value = single_value.strip()
-                    
-# ADAPTATION #4
-# 2016-05-27 - call
-# Alexandre Bolieux asked I replace commas with something valid.  I'm replacing them with semi-colons
-# which can act as a seperator character like the comma but get past that reserved character
+
+                    # ADAPTATION #4
+                    # 2016-05-27 - call
+                    # Alexandre Bolieux asked I replace commas with something valid.  I'm replacing them with semi-colons
+                    # which can act as a seperator character like the comma but get past that reserved character
                     single_value = single_value.replace(',', ';')
-# END ADAPTATION
+                    # END ADAPTATION
                     # remove multiple spaces
                     single_value = re.sub(r'\s+', ' ', single_value)
                     keyword_error = canada_tags(single_value).replace('"', '""')
 
-# ADAPTATION #5
-# 2016-05-27 - call
-# Alexandre Bolieux asked if I could replace commas with something valid.  I'm
-# replacing them with semi-colons which can act as a seperator character like
-# the comma but get past that reserved character
+                    # ADAPTATION #5
+                    # 2016-05-27 - call
+                    # Alexandre Bolieux asked if I could replace commas with something valid.  I'm
+                    # replacing them with semi-colons which can act as a seperator character like
+                    # the comma but get past that reserved character
                     if re.search('length is more than maximum 140', keyword_error, re.UNICODE):
                         pass
                     else:
-# END ADAPTATION
+                        # END ADAPTATION
                         if not keyword_error == '':
-                        #if not re.search(schema_ref["34"]['RegEx Filter'], single_value,re.UNICODE):
+                            # if not re.search(schema_ref["34"]['RegEx Filter'], single_value,re.UNICODE):
                             reportError(
                                 HNAP_fileIdentifier, [
-                                    schema_ref["34"]['CKAN API property']+'-'+CKAN_primary_lang,
+                                    schema_ref["34"]['CKAN API property'] + '-' + CKAN_primary_lang,
                                     "Invalid Keyword",
                                     keyword_error
-                                    #"Must be alpha-numeric, space or '-_./>+& ["+single_value+']'
+                                    # "Must be alpha-numeric, space or '-_./>+& ["+single_value+']'
                                 ])
                         else:
-                            if single_value not in json_record[schema_ref["34"]['CKAN API property']][CKAN_primary_lang]:
-                                json_record[schema_ref["34"]['CKAN API property']][CKAN_primary_lang].append(single_value)
+                            if single_value not in json_record[schema_ref["34"]['CKAN API property']][schema_ref["34a"]['CKAN API property'].split('.')[1]]:
+                                json_record[schema_ref["34"]['CKAN API property']][schema_ref["34a"]['CKAN API property'].split('.')[1]].append(
+                                    single_value)
 
-#                        if not len(json_record[schema_ref["34"]['CKAN API property']][CKAN_primary_lang]):
-#                            reportError(
-#                                HNAP_fileIdentifier,[
-#                                    schema_ref["34"]['CKAN API property']+'-'+CKAN_primary_lang,
-#                                    "No keywords"
-#                                ])
+            #                        if not len(json_record[schema_ref["34"]['CKAN API property']][CKAN_primary_lang]):
+            #                            reportError(
+            #                                HNAP_fileIdentifier,[
+            #                                    schema_ref["34"]['CKAN API property']+'-'+CKAN_primary_lang,
+            #                                    "No keywords"
+            #                                ])
 
-# CC::OpenMaps-35 Keywords (French)
+            # CC::OpenMaps-35 Keywords (French)
 
-            json_record[schema_ref["34"]['CKAN API property']][CKAN_secondary_lang] = []
+            # json_record[schema_ref["34"]['CKAN API property']][CKAN_secondary_lang] = []
+            json_record[schema_ref["34"]['CKAN API property']][schema_ref["34b"]['CKAN API property'].split('.')[1]] = []
 
-            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["35"])
+            value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["34b"])
             if value:
                 for single_value in value:
                     p = re.compile('^[A-Z][A-Z] [^>]+ > ')
                     single_value = p.sub('', single_value)
-# ADAPTATION #4
-# 2016-05-27 - call
-# Alexandre Bolieux asked if I could replace commas with something valid.  I'm
-# replacing them with semi-colons which can act as a seperator character like
-# the comma but get past that reserved character
+                    # ADAPTATION #4
+                    # 2016-05-27 - call
+                    # Alexandre Bolieux asked if I could replace commas with something valid.  I'm
+                    # replacing them with semi-colons which can act as a seperator character like
+                    # the comma but get past that reserved character
                     single_value = single_value.replace(',', ';')
-# END ADAPTATION
+                    # END ADAPTATION
                     single_value = re.sub(r'\s+', ' ', single_value)
                     keyword_error = canada_tags(single_value).replace('"', '""')
 
-# ADAPTATION #5
-# 2016-05-27 - call
-# Alexandre Bolieux asked I drop keywords that exceed 140 characters
+                    # ADAPTATION #5
+                    # 2016-05-27 - call
+                    # Alexandre Bolieux asked I drop keywords that exceed 140 characters
                     if re.search('length is more than maximum 140', keyword_error, re.UNICODE):
                         pass
                     else:
-# END ADAPTATION
+                        # END ADAPTATION
                         if not keyword_error == '':
-                        #if not re.search(schema_ref["34"]['RegEx Filter'], single_value,re.UNICODE):
+                            # if not re.search(schema_ref["34"]['RegEx Filter'], single_value,re.UNICODE):
                             reportError(
                                 HNAP_fileIdentifier, [
-                                    schema_ref["34"]['CKAN API property']+'-'+CKAN_secondary_lang,
+                                    schema_ref["34"]['CKAN API property'] + '-' + CKAN_secondary_lang,
                                     "Invalid Keyword",
                                     keyword_error
-                                    #'Must be alpha-numeric, space or -_./>+& ['+single_value+']'
+                                    # 'Must be alpha-numeric, space or -_./>+& ['+single_value+']'
                                 ])
                         else:
-                            if single_value not in json_record[schema_ref["34"]['CKAN API property']][CKAN_secondary_lang]:
-                                json_record[schema_ref["34"]['CKAN API property']][CKAN_secondary_lang].append(single_value)
+                            if single_value not in json_record[schema_ref["34"]['CKAN API property']][schema_ref["34b"]['CKAN API property'].split('.')[1]]:
+                                json_record[schema_ref["34"]['CKAN API property']][schema_ref["34b"]['CKAN API property'].split('.')[1]].append(single_value)
 
-#                        if not len(json_record[schema_ref["34"]['CKAN API property']][CKAN_secondary_lang]):
-#                            reportError(
-#                                HNAP_fileIdentifier,[
-#                                    schema_ref["34"]['CKAN API property']+'-'+CKAN_secondary_lang,
-#                                    "No keywords"
-#                                ])
+                                # json_record[schema_ref["34"]['CKAN API property']][CKAN_secondary_lang].append(single_value)
 
-# CC::OpenMaps-36 Subject
+            #                        if not len(json_record[schema_ref["34"]['CKAN API property']][CKAN_secondary_lang]):
+            #                            reportError(
+            #                                HNAP_fileIdentifier,[
+            #                                    schema_ref["34"]['CKAN API property']+'-'+CKAN_secondary_lang,
+            #                                    "No keywords"
+            #                                ])
+
+            # CC::OpenMaps-36 Subject
 
             subject_values = []
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["36"])
@@ -869,14 +1237,14 @@ def main():
 
                 if len(subject_values) < 1:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["36"]['CKAN API property'],
-                            'Value not found in '+schema_ref["36"]['Reference']
+                            'Value not found in ' + schema_ref["36"]['Reference']
                         ])
                 else:
                     json_record[schema_ref["36"]['CKAN API property']] = list(set(subject_values))
 
-# CC::OpenMaps-37 Topic Category
+            # CC::OpenMaps-37 Topic Category
 
             topicCategory_values = []
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["37"])
@@ -886,26 +1254,26 @@ def main():
                         topicCategory.strip(), napMD_KeywordTypeCode)
                     if termsValue:
                         topicCategory_values.append(termsValue[0])
-                
+
                 if len(topicCategory_values) < 1:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["37"]['CKAN API property'],
-                            'Value not found in '+schema_ref["37"]['Reference']
+                            'Value not found in ' + schema_ref["37"]['Reference']
                         ])
                 else:
                     json_record[schema_ref["37"]['CKAN API property']] = topicCategory_values
 
-# CC::OpenMaps-38 Audience
-# TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-38 Audience
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-39 Place of Publication (English)
-# TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-39 Place of Publication (English)
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-40 Place of Publication  (French)
-# TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-40 Place of Publication  (French)
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-41 Spatial
+            # CC::OpenMaps-41 Spatial
 
             north = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["41n"])
             if north:
@@ -915,7 +1283,6 @@ def main():
                     if east:
                         west = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["41w"])
                         if west:
-
                             # ensure we have proper numbers
                             north = [float(north[0]) if '.' in north[0] else int(north[0])]
                             east = [float(east[0]) if '.' in east[0] else int(east[0])]
@@ -932,37 +1299,40 @@ def main():
                                 [west, south]
                             ]]
 
-                            #json_record[schema_ref["41"]['CKAN API property']] = json.dumps(GeoJSON)
-                            json_record[schema_ref["41"]['CKAN API property']] = '{"type": "Polygon","coordinates": [[[%s,%s],[%s,%s],[%s,%s],[%s,%s],[%s,%s]]]}' % (west[0],south[0],east[0],south[0],east[0],north[0],west[0],north[0],west[0],south[0])
+                            # json_record[schema_ref["41"]['CKAN API property']] = json.dumps(GeoJSON)
+                            json_record[schema_ref["41"][
+                                'CKAN API property']] = '{"type": "Polygon","coordinates": [[[%s,%s],[%s,%s],[%s,%s],[%s,%s],[%s,%s]]]}' % (
+                            west[0], south[0], east[0], south[0], east[0], north[0], west[0], north[0], west[0],
+                            south[0])
 
-# CC::OpenMaps-42 Geographic Region Name
-# TBS 2016-04-13: Not in HNAP, we can skip (the only providing the bounding box, not the region name)
+            # CC::OpenMaps-42 Geographic Region Name
+            # TBS 2016-04-13: Not in HNAP, we can skip (the only providing the bounding box, not the region name)
 
-# CC::OpenMaps-43 Time Period Coverage Start Date
+            # CC::OpenMaps-43 Time Period Coverage Start Date
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["43"])
             if value:
                 if sanityDate(
-                    HNAP_fileIdentifier,[
-                        schema_ref["43"]['CKAN API property']+'-start'
-                    ],
-                    maskDate(value)
+                        HNAP_fileIdentifier, [
+                            schema_ref["43"]['CKAN API property'] + '-start'
+                        ],
+                        maskDate(value)
                 ):
                     json_record[schema_ref["43"]['CKAN API property']] = maskDate(value)
 
-# CC::OpenMaps-44 Time Period Coverage End Date
-#   ADAPTATION #2
-#     CKAN (or Solr) requires an end date where one doesn't exist.  An open
-#     record should run without an end date.  Since this is not the case a
-#     '9999-99-99' is used in lieu.
-#   ADAPTATION #3
-#     Temporal elements are ISO 8601 date objects but this field may be
-#     left blank (invalid).
-#     The intent is to use a blank field as a maker for an "open" record
-#     were omission of this field would be standard practice.  No
-#     gml:endPosition = no end.
-#     Since changing the source seems to be impossible we adapt by
-#     replacing a blank entry with the equally ugly '9999-99-99' forced
-#     end in CKAN.
+            # CC::OpenMaps-44 Time Period Coverage End Date
+            #   ADAPTATION #2
+            #     CKAN (or Solr) requires an end date where one doesn't exist.  An open
+            #     record should run without an end date.  Since this is not the case a
+            #     '9999-99-99' is used in lieu.
+            #   ADAPTATION #3
+            #     Temporal elements are ISO 8601 date objects but this field may be
+            #     left blank (invalid).
+            #     The intent is to use a blank field as a maker for an "open" record
+            #     were omission of this field would be standard practice.  No
+            #     gml:endPosition = no end.
+            #     Since changing the source seems to be impossible we adapt by
+            #     replacing a blank entry with the equally ugly '9999-99-99' forced
+            #     end in CKAN.
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["44"])
             if value:
@@ -972,14 +1342,14 @@ def main():
                     check_for_blank = '9999-09-09'
 
                 if sanityDate(
-                    HNAP_fileIdentifier,[
-                        schema_ref["44"]['CKAN API property']+'-end'
-                    ],
-                    maskDate(check_for_blank)
+                        HNAP_fileIdentifier, [
+                            schema_ref["44"]['CKAN API property'] + '-end'
+                        ],
+                        maskDate(check_for_blank)
                 ):
                     json_record[schema_ref["44"]['CKAN API property']] = maskDate(check_for_blank)
 
-# CC::OpenMaps-45 Maintenance and Update Frequency
+            # CC::OpenMaps-45 Maintenance and Update Frequency
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["45"])
             if value:
@@ -987,16 +1357,15 @@ def main():
                 termsValue = fetchCLValue(value, napMD_MaintenanceFrequencyCode)
                 if not termsValue:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["45"]['CKAN API property'],
-                            'Value not found in '+schema_ref["45"]['Reference']
+                            'Value not found in ' + schema_ref["45"]['Reference']
                         ])
                 else:
                     json_record[schema_ref["45"]['CKAN API property']] = termsValue[2]
 
-
-# CC::OpenMaps-46 Date Published
-# CC::OpenMaps-47 Date Modified
+            # CC::OpenMaps-46 Date Published
+            # CC::OpenMaps-47 Date Modified
 
             ##################################################
             # These are a little different, we have to do these odd birds manually
@@ -1004,9 +1373,9 @@ def main():
                 schema_ref["46"]["FGP XPATH"],
                 namespaces={
                     'gmd': 'http://www.isotc211.org/2005/gmd',
-                    'gco': 'http://www.isotc211.org/2005/gco'})      
-                     
-            if(len(r)):
+                    'gco': 'http://www.isotc211.org/2005/gco'})
+
+            if (len(r)):
                 for cn in r:
                     input_types = {}
                     inKey = []
@@ -1028,7 +1397,7 @@ def main():
                         input_type = input_type.strip()
                         if input_type == u'publication':
                             if sanityDate(
-                                    HNAP_fileIdentifier,[
+                                    HNAP_fileIdentifier, [
                                         schema_ref["46"]['CKAN API property']
                                     ],
                                     maskDate(inVal)):
@@ -1037,7 +1406,7 @@ def main():
 
                         if input_type == u'revision' or input_type == u'révision':
                             if sanityDate(
-                                    HNAP_fileIdentifier,[
+                                    HNAP_fileIdentifier, [
                                         schema_ref["47"]['CKAN API property']
                                     ],
                                     maskDate(inVal)):
@@ -1047,49 +1416,48 @@ def main():
                 # Check the field is populated if you have to
                 if schema_ref["46"]['Requirement'] == 'M' and schema_ref["46"]['CKAN API property'] not in json_record:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["46"]['CKAN API property'],
-                            'Value not found in '+schema_ref["46"]['Reference']
+                            'Value not found in ' + schema_ref["46"]['Reference']
                         ])
 
                 # Check the field is populated if you have to
                 if schema_ref["47"]['Requirement'] == 'M' and schema_ref["47"]['CKAN API property'] not in json_record:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["47"]['CKAN API property'],
-                            'Value not found in '+schema_ref["47"]['Reference']
+                            'Value not found in ' + schema_ref["47"]['Reference']
                         ])
-
 
             if 'date_published' not in json_record:
                 reportError(
-                    HNAP_fileIdentifier,[
+                    HNAP_fileIdentifier, [
                         schema_ref["46"]['CKAN API property'],
                         'mandatory field missing'
                     ])
 
-# CC::OpenMaps-48 Date Released
-# SYSTEM GENERATED
+            # CC::OpenMaps-48 Date Released
+            # SYSTEM GENERATED
 
-# CC::OpenMaps-49 Homepage URL (English)
-# TBS 2016-04-13: Not in HNAP, we can skip
-# CC::OpenMaps-50 Homepage URL (French)
-# TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-49 Homepage URL (English)
+            # TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-50 Homepage URL (French)
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-51 Series Name (English)
-# TBS 2016-04-13: Not in HNAP, we can skip
-# CC::OpenMaps-52 Series Name (French)
-# TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-51 Series Name (English)
+            # TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-52 Series Name (French)
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-53 Series Issue Identification (English)
-# TBS 2016-04-13: Not in HNAP, we can skip
-# CC::OpenMaps-54 Series Issue Identification (French)
-# TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-53 Series Issue Identification (English)
+            # TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-54 Series Issue Identification (French)
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-55 Digital Object Identifier
-# TBS 2016-04-13: Not in HNAP, we can skip
+            # CC::OpenMaps-55 Digital Object Identifier
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-56 Reference System Information
+            # CC::OpenMaps-56 Reference System Information
 
             # Allow for multiple refrence definitions
             # Updated implementation mimics prior behaviour.
@@ -1103,7 +1471,7 @@ def main():
 
             if len(possible_refrences) == 0:
                 reportError(
-                    HNAP_fileIdentifier,[
+                    HNAP_fileIdentifier, [
                         schema_ref["56"]['CKAN API property'],
                         'No projection information found'
                     ])
@@ -1129,27 +1497,29 @@ def main():
                     # If this is to become multiple projections the property needs to be changed into an array
                     # in the schema and _then_ in CKAN.
                     if vala != '' and valb != '' and valc != '':
-                        first_full_triplet = vala+','+valb+','+valc
+                        first_full_triplet = vala + ',' + valb + ',' + valc
                         json_record[schema_ref["56"]['CKAN API property']] = first_full_triplet
                         break
-                
+
                 # if the triplet is not complete then fail over to just the mandatory HNAP requirement
                 if first_full_triplet == '':
 
                     rs_identifier = fetch_FGP_value(possible_refrences[0], HNAP_fileIdentifier, schema_ref["56a"])
 
                     if len(rs_identifier) > 0:
+                        first_full_triplet = rs_identifier + ',' + fetch_FGP_value(possible_refrences[0],
+                                                                                   HNAP_fileIdentifier, schema_ref[
+                                                                                       "56b"]) + ',' + fetch_FGP_value(
+                            possible_refrences[0], HNAP_fileIdentifier, schema_ref["56c"])
 
-                        first_full_triplet = rs_identifier+','+fetch_FGP_value(possible_refrences[0], HNAP_fileIdentifier, schema_ref["56b"])+','+fetch_FGP_value(possible_refrences[0], HNAP_fileIdentifier, schema_ref["56c"])
-                    
                     if first_full_triplet == '':
                         reportError(
-                            HNAP_fileIdentifier,[
+                            HNAP_fileIdentifier, [
                                 schema_ref["56"]['CKAN API property'],
                                 'Complete triplet not found'
                             ])
 
-# CC::OpenMaps-57 Distributor (English)
+            # CC::OpenMaps-57 Distributor (English)
 
             primary_vals = {}
             primary_vals[CKAN_primary_lang] = {}
@@ -1163,7 +1533,7 @@ def main():
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["58a"])
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['organization_name'] = single_value
+                    primary_vals[CKAN_secondary_lang]['nom_organization'] = single_value
 
             # phone
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["57b"])
@@ -1173,7 +1543,7 @@ def main():
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["58b"])
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['phone'] = single_value
+                    primary_vals[CKAN_secondary_lang]['telephone'] = single_value
 
             # address
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["57c"])
@@ -1183,7 +1553,7 @@ def main():
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["58c"])
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['address'] = single_value
+                    primary_vals[CKAN_secondary_lang]['adresse'] = single_value
 
             # city
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["57d"])
@@ -1193,7 +1563,7 @@ def main():
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["58d"])
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['city'] = single_value
+                    primary_vals[CKAN_secondary_lang]['ville'] = single_value
 
             # administrativeArea
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["57e"])
@@ -1203,7 +1573,7 @@ def main():
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["58e"])
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['administrative_area'] = single_value
+                    primary_vals[CKAN_secondary_lang]['zone_administrative'] = single_value
 
             # postalCode
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["57f"])
@@ -1213,7 +1583,7 @@ def main():
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["58f"])
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['postal_code'] = single_value
+                    primary_vals[CKAN_secondary_lang]['code_postal'] = single_value
 
             # country
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["57g"])
@@ -1223,7 +1593,7 @@ def main():
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["58g"])
             if value:
                 for single_value in value:
-                    primary_vals[CKAN_secondary_lang]['country'] = single_value
+                    primary_vals[CKAN_secondary_lang]['pays'] = single_value
 
             # electronicMailAddress  mandatory
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["57h"])
@@ -1243,9 +1613,9 @@ def main():
                     termsValue = fetchCLValue(single_value, napCI_RoleCode)
                     if not termsValue:
                         reportError(
-                            HNAP_fileIdentifier,[
+                            HNAP_fileIdentifier, [
                                 schema_ref["57"]['CKAN API property'],
-                                'Value not found in '+schema_ref["57"]['Reference']
+                                'Value not found in ' + schema_ref["57"]['Reference']
                             ])
                     else:
                         primary_vals[CKAN_primary_lang]['role'] = termsValue[0]
@@ -1253,11 +1623,11 @@ def main():
 
             json_record[schema_ref["57"]['CKAN API property']] = json.dumps(primary_vals)
 
-            #json_record[schema_ref["57"]['CKAN API property']] = {}
-            #json_record[schema_ref["57"]['CKAN API property']][CKAN_primary_lang] = ','.join(primary_vals)
-            #json_record[schema_ref["57"]['CKAN API property']][CKAN_secondary_lang] = ','.join(second_vals)
+            # json_record[schema_ref["57"]['CKAN API property']] = {}
+            # json_record[schema_ref["57"]['CKAN API property']][CKAN_primary_lang] = ','.join(primary_vals)
+            # json_record[schema_ref["57"]['CKAN API property']][CKAN_secondary_lang] = ','.join(second_vals)
 
-# CC::OpenMaps-59 Status
+            # CC::OpenMaps-59 Status
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["59"])
             if value:
@@ -1265,19 +1635,19 @@ def main():
                 termsValue = fetchCLValue(value, napMD_ProgressCode)
                 if not termsValue:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["59"]['CKAN API property'],
-                            'Value not found in '+schema_ref["59"]['Reference']
+                            'Value not found in ' + schema_ref["59"]['Reference']
                         ])
                 else:
                     json_record[schema_ref["59"]['CKAN API property']] = termsValue[0]
 
-# CC::OpenMaps-60 Association Type
+            # CC::OpenMaps-60 Association Type
 
             associationTypes_array = []
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["60"])
-            
+
             # Not mandatory, process if you have it
             if value and len(value) > 0:
 
@@ -1294,7 +1664,7 @@ def main():
             if len(associationTypes_array):
                 json_record[schema_ref["60"]['CKAN API property']] = ','.join(associationTypes_array)
 
-# CC::OpenMaps-61 Aggregate Dataset Identifier
+            # CC::OpenMaps-61 Aggregate Dataset Identifier
 
             aggregateDataSetIdentifier_array = []
 
@@ -1304,7 +1674,7 @@ def main():
 
                 try:
                     for aggregateDataSetIdentifier in value:
-                        (primary, secondary) =\
+                        (primary, secondary) = \
                             aggregateDataSetIdentifier.strip().split(';')
                         aggregateDataSetIdentifier_array.append(primary.strip())
                         aggregateDataSetIdentifier_array.append(secondary.strip())
@@ -1318,7 +1688,7 @@ def main():
             json_record[schema_ref["61"]['CKAN API property']] = ','.join(
                 aggregateDataSetIdentifier_array)
 
-# CC::OpenMaps-62 Spatial Representation Type
+            # CC::OpenMaps-62 Spatial Representation Type
 
             value = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["62"])
 
@@ -1337,37 +1707,51 @@ def main():
                         termsValue = []
                     else:
                         spatialRepresentationType_array.append(termsValue[0])
-            
+
             # json_record[schema_ref["62"]['CKAN API property']] = ','.join(
             # spatialRepresentationType_array)
 
             json_record[schema_ref["62"]['CKAN API property']] = spatialRepresentationType_array
 
-# CC::OpenMaps-63 Jurisdiction
-# TBS 2016-04-13: Not in HNAP, but can we default text to ‘Federal’ / ‘Fédéral
+            # CC::OpenMaps-63 Jurisdiction
+            # TBS 2016-04-13: Not in HNAP, but can we default text to ‘Federal’ / ‘Fédéral
 
             json_record[schema_ref["63"]['CKAN API property']] = schema_ref["63"]['FGP XPATH']
 
             if org_name.lower().find('government of canada') == -1:
-                    json_record[schema_ref["63"]['CKAN API property']] = schema_ref["63p"]['FGP XPATH']
+                json_record[schema_ref["63"]['CKAN API property']] = schema_ref["63p"]['FGP XPATH']
 
-# CC::OpenMaps-64 Licence
-# TBS (call): use ca-ogl-lgo
 
-            json_record[schema_ref["64"]['CKAN API property']] = schema_ref["64"]['FGP XPATH']
+            if fetch_nunicipalname:
+                json_record[schema_ref["63"]['CKAN API property']] = schema_ref["63m"]['FGP XPATH']
 
-            if org_name.lower().find('government of alberta') != -1:
-                json_record[schema_ref["64"]['CKAN API property']] = schema_ref["64ab"]['FGP XPATH']
-            elif org_name.lower().find('government of british columbia') != -1:
-                json_record[schema_ref["64"]['CKAN API property']] = schema_ref["64bc"]['FGP XPATH']
+            # CC::OpenMaps-64 Licence
+            # TBS (call): use ca-ogl-lgo
 
-# CC::OpenMaps-65 Unique Identifier
-# System generated
 
-#### Resources
+            def SetLicence(kindex):
+                json_record[schema_ref["64"]['CKAN API property']] = schema_ref[kindex]['FGP XPATH']
 
-# CC::OpenMaps-68 Date Published
-# TBS 2016-04-13: Not in HNAP, we can skip
+            fetch_orgname = [x for x in OrgNameDict if x.lower() in org_name.lower()]
+            if len(fetch_orgname) > 0:
+                SetLicence(licencekey[fetch_orgname[0]])
+
+            # json_record[schema_ref["64"]['CKAN API property']] = schema_ref["64"]['FGP XPATH']
+
+            # if org_name.lower().find('government of alberta') != -1:
+            #     json_record[schema_ref["64"]['CKAN API property']] = schema_ref["64ab"]['FGP XPATH']
+            # elif org_name.lower().find('government of british columbia') != -1:
+            #     json_record[schema_ref["64"]['CKAN API property']] = schema_ref["64bc"]['FGP XPATH']
+
+            # choice[string](parameters)
+
+            # CC::OpenMaps-65 Unique Identifier
+            # System generated
+
+            #### Resources
+
+            # CC::OpenMaps-68 Date Published
+            # TBS 2016-04-13: Not in HNAP, we can skip
 
             json_record['resources'] = []
             record_resources = fetchXMLArray(
@@ -1387,21 +1771,22 @@ def main():
                 json_record_resource = {}
                 json_record_resource[schema_ref["66"]['CKAN API property']] = {}
 
-# CC::OpenMaps-66 Title (English)
+                # CC::OpenMaps-66 Title (English)
 
-                value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["66"])
+                value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["66a"])
                 if value:
-                    json_record_resource[schema_ref["66"]['CKAN API property']][CKAN_primary_lang] = value
+                    json_record_resource[schema_ref["66"]['CKAN API property']][schema_ref["66a"]['CKAN API property'].split('.')[1]]  = value
 
-# CC::OpenMaps-67 Title (English)
+                # CC::OpenMaps-67 Title (English)
 
-                value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["67"])
+                value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["66b"])
                 if value:
-                    json_record_resource[schema_ref["66"]['CKAN API property']][CKAN_secondary_lang] = value
+                    json_record_resource[schema_ref["66"]['CKAN API property']][schema_ref["66b"]['CKAN API property'].split('.')[1]] = value
+                
 
-# CC::OpenMaps-69 Resource Type
-# CC::OpenMaps-70 Format
-# CC::OpenMaps-73 Language
+                # CC::OpenMaps-69 Resource Type
+                # CC::OpenMaps-70 Format
+                # CC::OpenMaps-73 Language
 
                 value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["69-70-73"])
                 if value:
@@ -1409,7 +1794,7 @@ def main():
 
                     if description_text.count(';') != 2:
                         reportError(
-                            HNAP_fileIdentifier,[
+                            HNAP_fileIdentifier, [
                                 schema_ref["69-70-73"]['CKAN API property'],
                                 'Content, Format or Language missing, must be: contentType;format;lang,lang',
                                 description_text
@@ -1425,7 +1810,7 @@ def main():
                                 languages_out.append('en')
                             if language.strip() == 'fra':
                                 languages_out.append('fr')
-                            if language.strip() == 'zxx': # Non linguistic
+                            if language.strip() == 'zxx':  # Non linguistic
                                 languages_out.append('zxx')
                         # language_str = ','.join(languages_out)
                         language_str = []
@@ -1436,7 +1821,7 @@ def main():
                         json_record_resource[schema_ref["70"]['CKAN API property']] = res_format.strip()
                         json_record_resource[schema_ref["73"]['CKAN API property']] = language_str
 
-                        #XXX Super duper hack
+                        # XXX Super duper hack
                         if json_record_resource[schema_ref["69"]['CKAN API property']] == 'document de soutien':
                             json_record_resource[schema_ref["69"]['CKAN API property']] = 'guide'
                         if json_record_resource[schema_ref["69"]['CKAN API property']] == 'supporting document':
@@ -1465,84 +1850,84 @@ def main():
 
                 else:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["69-70-73"]['CKAN API property'],
                             'format,mandatory field missing'
                         ])
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["69-70-73"]['CKAN API property'],
                             'language,mandatory field missing'
                         ])
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["69-70-73"]['CKAN API property'],
                             'contentType,mandatory field missing'
                         ])
 
                 if json_record_resource[schema_ref["69"]['CKAN API property']].lower() not in ResourceType:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["69-70-73"]['CKAN API property'],
                             'invalid resource type',
                             json_record_resource[schema_ref["69"]['CKAN API property']]
                         ])
                 else:
-                    json_record_resource[schema_ref["69"]['CKAN API property']] = ResourceType[json_record_resource[schema_ref["69"]['CKAN API property']].lower()][0]
+                    json_record_resource[schema_ref["69"]['CKAN API property']] = \
+                    ResourceType[json_record_resource[schema_ref["69"]['CKAN API property']].lower()][0]
 
                 if json_record_resource[schema_ref["70"]['CKAN API property']] not in CL_Formats:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["69-70-73"]['CKAN API property'],
                             'invalid resource format',
                             json_record_resource[schema_ref["70"]['CKAN API property']]
                         ])
 
-# CC::OpenMaps-71 Character Set
-# TBS 2016-04-13: Not in HNAP, we can skip
-# CC::OpenMaps-74 Size
-# TBS 2016-04-13: Not in HNAP, we can skip
+                # CC::OpenMaps-71 Character Set
+                # TBS 2016-04-13: Not in HNAP, we can skip
+                # CC::OpenMaps-74 Size
+                # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-74 Download URL
+                # CC::OpenMaps-74 Download URL
 
                 value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["74"])
                 if value:
                     json_record_resource[schema_ref["74"]['CKAN API property']] = value
                 else:
                     reportError(
-                        HNAP_fileIdentifier,[
+                        HNAP_fileIdentifier, [
                             schema_ref["74"]['CKAN API property'],
                             'URL, mandatory field missing'
                         ])
 
+                # # CC::OpenMaps-75 Title (English)
+                # # XXX Need to confirm why this is not included
+                # json_record[schema_ref["75"]['CKAN API property']] = {}
 
-# CC::OpenMaps-75 Title (English)
-# XXX Need to confirm why this is not included
-#            json_record[schema_ref["75"]['CKAN API property']] = {}
-#
-#            value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["75"])
-#            if value:
-#                json_record[schema_ref["75"]['CKAN API property']][CKAN_primary_lang] = value
+                # value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["75"])
+                # if value:
+                #     json_record[schema_ref["75"]['CKAN API property']][CKAN_primary_lang] = value
 
-# CC::OpenMaps-76 Title (French)
-# XXX Need to confirm why this is not included
-#            value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["76"])
-#            if value:
-#                json_record[schema_ref["75"]['CKAN API property']][CKAN_secondary_lang] = value
+                # # CC::OpenMaps-76 Title (French)
+                # # XXX Need to confirm why this is not included
+                # value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["75b"])
+                # if value:
+                #     json_record[schema_ref["75"]['CKAN API property']][schema_ref["75b"]['CKAN API property'].split('.')[1]] = value
 
-# CC::OpenMaps-76 Record Type
-# TBS 2016-04-13: Not in HNAP, we can skip
-# CC::OpenMaps-78 Relationship Type
-# TBS 2016-04-13: Not in HNAP, we can skip
-# CC::OpenMaps-79 Language
-# TBS 2016-04-13: Not in HNAP, we can skip
-# CC::OpenMaps-80 Record URL
-# TBS 2016-04-13: Not in HNAP, we can skip
+                # CC::OpenMaps-76 Record Type
+                # TBS 2016-04-13: Not in HNAP, we can skip
+                # CC::OpenMaps-78 Relationship Type
+                # TBS 2016-04-13: Not in HNAP, we can skip
+                # CC::OpenMaps-79 Language
+                # TBS 2016-04-13: Not in HNAP, we can skip
+                # CC::OpenMaps-80 Record URL
+                # TBS 2016-04-13: Not in HNAP, we can skip
 
-# CC::OpenMaps-81 Mappable
-# Stored as a generic Display Flag in preperation for other forms of visualizations
+                # CC::OpenMaps-81 Mappable
+                # Stored as a generic Display Flag in preperation for other forms of visualizations
 
-                #if schema_ref["81"]['CKAN API property'] not in json_record:
+                # if schema_ref["81"]['CKAN API property'] not in json_record:
                 #    can_be_used_in_RAMP = False
                 #    json_record[schema_ref["81"]['CKAN API property']] = can_be_used_in_RAMP
 
@@ -1553,21 +1938,21 @@ def main():
                         protocol_desc = value.strip()
                         if protocol_desc in mappable_protocols:
                             can_be_used_in_RAMP = True
-                            
+
                             # check to see if the URL is HTTPS
                             value = fetch_FGP_value(resource, HNAP_fileIdentifier, schema_ref["74"])
                             # if value[:value.find(":")] == 'http':
-                                # print "No HTTPS: " + HNAP_fileIdentifier
+                            # print "No HTTPS: " + HNAP_fileIdentifier
                             if value:
                                 can_be_used_in_RAMP = value[:value.find(":")] == 'https'
 
                 # Append the resource to the Open Maps record
                 json_record['resources'].append(json_record_resource)
-            
+
             # TODO Add parent relation if exists
             # json_record['resources'].append( { "relation_type" : "info" } )
 
-            #json_record[schema_ref["81"]['CKAN API property']] = can_be_used_in_RAMP
+            # json_record[schema_ref["81"]['CKAN API property']] = can_be_used_in_RAMP
             view_on_map = ""
             '''
             strtmp = str(HNAP_fileIdentifier)
@@ -1589,12 +1974,10 @@ def main():
                 can_be_used_in_RAMP = True
             '''
 
-
             if can_be_used_in_RAMP:
                 json_record['display_flags'].append('fgp_viewer')
                 view_on_map = " [ View on Map ]"
                 num_view_on_map += 1
-
 
             ##################################################
             #                                                #
@@ -1607,63 +1990,88 @@ def main():
             ##################################################
 
             if HNAP_fileIdentifier in error_records:
-                time.sleep(0.1) #slow display#
-                print "\x1b[0;37;41m Reject: \x1b[0m "+str(HNAP_fileIdentifier) + view_on_map
+                time.sleep(0.1)  # slow display#
+                print "\x1b[0;37;41m Reject: \x1b[0m " + str(HNAP_fileIdentifier) + view_on_map
                 num_rejects += 1
             else:
-                time.sleep(0.1) #slow display#
-                print "\x1b[0;37;42m Accept: \x1b[0m "+str(HNAP_fileIdentifier) + view_on_map
+                time.sleep(0.1)  # slow display#
+                print "\x1b[0;37;42m Accept: \x1b[0m " + str(HNAP_fileIdentifier) + view_on_map
                 json_record['imso_approval'] = 'true'
                 json_record['ready_to_publish'] = 'true'
                 json_record['state'] = 'active'
                 json_record['restrictions'] = 'unrestricted'
                 # if error don't do this
                 json_records.append(json_record)
-                f.close()
+                schemafile.close()
 
             ##################################################
             #                                                #
             # Move onto the next record                      #
             #                                                #
             ##################################################
-
+###############################################
+###############################################
     if len(json_records) > 0:
-        print ""
-        print "Generating Common Core JSON file for import to CKAN...",
+        print "Generating Common Core JSON file for import to CKAN..."
 
-    # Write JSON Lines to files
-    output = codecs.open(output_jl, 'w', 'utf-8')
-    for json_record in json_records:
-        utf_8_output =\
-        json.dumps(
-            json_record,
-            #sort_keys=True,
-            #indent=4,
-            ensure_ascii=False,
-            encoding='utf8')
-        #print utf_8_output
-        output.write(utf_8_output+"\n")
-    output.close()
+        # Write JSON Lines to files
+        print " Generating New JSON"
+        output = codecs.open(output_jl, 'w', 'utf-8')
+
+        groupcount = 1
+        fileindexcount = 1
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        groupoutput = codecs.open(OutputEnv + "/" + timestr + "-" + str(fileindexcount) + ".jl",'w', 'utf-8')
+        for json_record in json_records:
+            utf_8_output = \
+                json.dumps(
+                    json_record,
+                    # sort_keys=True,
+                    # indent=4,
+                    ensure_ascii=False,
+                    encoding='utf8')
+            # print utf_8_output
+        
+            output.write(utf_8_output + "\n")
+            groupoutput.write(utf_8_output + "\n")
+            if groupcount%50 == 0:
+                groupoutput.close()
+                fileindexcount +=1
+                timestr = time.strftime("%Y%m%d-%H%M%S")
+                groupoutput = codecs.open(OutputEnv + "/" + timestr + "-" + str(fileindexcount)  +".jl",'w', 'utf-8')
+            groupcount += 1
+        groupoutput.close()    
+        output.close()
+
+    
 
     if len(json_records) > 0:
         print "Done!"
         print ""
-        print "* Number of records accepted: "+str(len(json_records))
+        print "* Number of records accepted: " + str(len(json_records))
         print ""
-        print "* Number of records rejected: "+str(num_rejects)
+        print "* Number of records rejected: " + str(num_rejects)
         print ""
-        print "* Number with view on map:    "+str(num_view_on_map)
+        print "* Number with view on map:    " + str(num_view_on_map)
         print ""
-        print "* Number of errors logged:    "+str(len(error_output)) + " [ harvested_record_errors.csv | harvested_record_errors.html ]"
+        print "* Number of errors logged:    " + str(
+            len(error_output)) + " [ harvested_record_errors.csv | harvested_record_errors.html ]"
         print ""
- 
+
     output = codecs.open(output_err, 'w', 'utf-8')
     if len(error_output) > 0:
-        output.write('"id","field","description","value"'+u"\n")
+        output.write('"id","field","description","value"' + u"\n")
     for error in error_output:
-        #output.write(unicode(error+"\n", 'utf-8'))
-        output.write(error+u"\n")
+        # output.write(unicode(error+"\n", 'utf-8'))
+        output.write(error + u"\n")
     output.close()
+
+    ## Move file to Porcessed Dir
+    if SingleXmlInput == True:
+        ProcDirCreation();
+        # shutil.move(sys.argv[2], "processed-xml")
+
+
 
 ##################################################
 # Reporting, Sanity and Access functions
@@ -1674,47 +2082,55 @@ def main():
 # sanityFirst(values)
 
 # Fire off an error to cmd line
-def reportError(HNAP_fileIdentifier,errorInfo):
-    errorText = '"'+HNAP_fileIdentifier+'","'+'","'.join(errorInfo)+'"'
+def reportError(HNAP_fileIdentifier, errorInfo):
+    errorText = '"' + HNAP_fileIdentifier + '","' + '","'.join(errorInfo) + '"'
     global error_output
     global error_records
-    #global OGDMES2ID
-    #print len(error_output)
+    # global OGDMES2ID
+    # print len(error_output)
     if not isinstance(errorText, unicode):
         errorText = unicode(errorText, 'utf-8')
     error_output.append(errorText)
     if HNAP_fileIdentifier not in error_records:
         error_records[HNAP_fileIdentifier] = []
     error_records[HNAP_fileIdentifier].append(errorText)
-    #print len(error_output)
+    # print len(error_output)
+
+
 # Sanity check: make sure the value exists
-def sanityMandatory(HNAP_fileIdentifier,errorInfo, values):
+def sanityMandatory(HNAP_fileIdentifier, errorInfo, values):
     values = list(set(values))
     if values is None or len(values) < 1:
         errorInfo.append('mandatory field missing or not found in controlled list')
-        reportError(HNAP_fileIdentifier,errorInfo)
+        reportError(HNAP_fileIdentifier, errorInfo)
         return False
     return True
+
+
 # Sanity check: make sure there is only one value
-def sanitySingle(HNAP_fileIdentifier,errorInfo, values):
+def sanitySingle(HNAP_fileIdentifier, errorInfo, values):
     values = list(set(values))
     if len(values) > 1:
         multiplefreqcode = True
         for value in values:
             if not napMD_MaintenanceFrequencyCode.has_key(value.strip()):
                 multiplefreqcode = False
+            if sanityDate(HNAP_fileIdentifier, errorInfo, value.strip()):
+                multiplefreqcode = True
 
         if not multiplefreqcode == True:
             errorInfo.append('multiple of a single value')
             errorInfo.append(','.join(values))
-            reportError(HNAP_fileIdentifier,errorInfo)
+            reportError(HNAP_fileIdentifier, errorInfo)
             return False
     return True
+
+
 # Sanity check: validate the date
-def sanityDate(HNAP_fileIdentifier,errorInfo, date_text):
+def sanityDate(HNAP_fileIdentifier, errorInfo, date_text):
     value = ''
     try:
-        value = datetime.datetime.strptime(
+        value = datetime.strptime(
             date_text,
             '%Y-%m-%d').isoformat().split('T')[0]
     except ValueError:
@@ -1728,12 +2144,15 @@ def sanityDate(HNAP_fileIdentifier,errorInfo, date_text):
         reportError(HNAP_fileIdentifier, errorInfo)
         return False
     return True
+
+
 # Sanity value: extract the first value or blank string
 def sanityFirst(values):
     if len(values) < 1:
         return ''
     else:
         return values[0]
+
 
 ##################################################
 # Project specific data manipulation
@@ -1745,6 +2164,7 @@ def maskDate(date):
     if len(date) >= 10:
         return date
     return date + ('xxxx-01-01'[-10 + len(date):])
+
 
 ##################################################
 # XML Extract functions
@@ -1767,7 +2187,7 @@ def fetchXMLArray(objectToXpath, xpath):
 def fetchXMLValues(objectToXpath, xpath):
     values = []
     r = fetchXMLArray(objectToXpath, xpath)
-    if(len(r)):
+    if (len(r)):
         for namePart in r:
             if namePart.text is None:
                 values.append('')
@@ -1797,15 +2217,34 @@ def fetchCLValue(SRCH_key, CL_array):
     p = re.compile(' ')
     SRCH_key = SRCH_key.lower()
     SRCH_key = p.sub('', SRCH_key)
+
     for CL_key, value in CL_array.items():
         CL_key = CL_key.lower()
         CL_key = p.sub('', CL_key)
-        CL_key = unicode(CL_key, errors='ignore')
-        if SRCH_key == CL_key:
+
+        if 'québec' in CL_key:
+            CL_key = unicode(CL_key, "UTF-8")
+        else:
+            CL_key = unicode(CL_key, errors='ignore')
+
+        if isinstance(SRCH_key, unicode):
+            if SRCH_key == CL_key:
+                return value
+        elif unicode(SRCH_key,'UTF-8') == CL_key:
             return value
     return None
-
-
+# # Fetch the value of a controled list ( at the bottom )
+# def fetchCLValue(SRCH_key, CL_array):
+#     p = re.compile(' ')
+#     SRCH_key = SRCH_key.lower()
+#     SRCH_key = p.sub('', SRCH_key)
+#     for CL_key, value in CL_array.items():
+#         CL_key = CL_key.lower()
+#         CL_key = p.sub('', CL_key)
+#         CL_key = unicode(CL_key, errors='ignore')
+#         if SRCH_key.decode('utf-8') == CL_key:
+#             return value
+#     return None
 # Schema aware fetch for generic items
 def fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref):
     if schema_ref['Value Type'] == 'value':
@@ -1822,30 +2261,32 @@ def fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref):
             HNAP_fileIdentifier, [
                 schema_ref['CKAN API property'],
                 'FETCH on undefined Value Type',
-                schema_ref['CKAN API property']+':'+schema_ref['Value Type']
+                schema_ref['CKAN API property'] + ':' + schema_ref['Value Type']
             ])
         return False
 
     if schema_ref['Requirement'] == 'M':
+
         if not sanityMandatory(
-            HNAP_fileIdentifier, [
-                schema_ref['CKAN API property']
-            ],
-            tmp
+                HNAP_fileIdentifier, [
+                    schema_ref['CKAN API property']
+                ],
+                tmp
         ):
             return False
     if schema_ref['Occurrences'] == 'S':
         if not sanitySingle(
-            HNAP_fileIdentifier, [
-                schema_ref['CKAN API property']
-            ],
-            tmp
+                HNAP_fileIdentifier, [
+                    schema_ref['CKAN API property']
+                ],
+                tmp
         ):
             return False
         else:
             return sanityFirst(tmp)
 
     return tmp
+
 
 ##################################################
 # External validators
@@ -1874,9 +2315,9 @@ def canada_tags(value):
     value = value.strip()
     lenght = len(value)
     if len(value) <= MIN_TAG_LENGTH:
-        return  u'Tag "%s" length is less than minimum %s' % (value, MIN_TAG_LENGTH)
+        return u'Tag "%s" length is less than minimum %s' % (value, MIN_TAG_LENGTH)
     if len(value) > MAX_TAG_LENGTH:
-        return u'Tag "%s" length is more than maximum %i'  % (value, MAX_TAG_LENGTH)
+        return u'Tag "%s" length is more than maximum %i' % (value, MAX_TAG_LENGTH)
     if u',' in value:
         return u'Tag "%s" may not contain commas' % (value)
     if u'  ' in value:
@@ -1891,6 +2332,7 @@ def canada_tags(value):
             return u'Tag "%s" may not contain separator charater U+%04x' % (value, ord(ch))
 
     return ''
+
 
 ##################################################
 # FGP specific Controled lists
@@ -1933,77 +2375,77 @@ def canada_tags(value):
 # OGP_catalogueType
 
 
-#Citation-Role
-#IC_90    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_90
+# Citation-Role
+# IC_90    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_90
 napCI_RoleCode = {
-    'RI_408'    : [u'resource_provider',        u'resourceProvider',         u'fournisseurRessource'],
-    'RI_409'    : [u'custodian',                u'custodian',                u'conservateur'],
-    'RI_410'    : [u'owner',                    u'owner',                    u'propriétaire'],
-    'RI_411'    : [u'user',                     u'user',                     u'utilisateur'],
-    'RI_412'    : [u'distributor',              u'distributor',              u'distributeur'],
-    'RI_413'    : [u'originator',               u'originator',                u'créateur'],
-    'RI_414'    : [u'point_of_contact',         u'pointOfContact',           u'contact'],
-    'RI_415'    : [u'principal_investigator',   u'principalInvestigator',    u'chercheurPrincipal'],
-    'RI_416'    : [u'processor',                u'processor',                u'traiteur'],
-    'RI_417'    : [u'publisher',                u'publisher',                u'éditeur'],
-    'RI_418'    : [u'author',                   u'author',                   u'auteur'],
-    'RI_419'    : [u'collaborator',             u'collaborator',             u'collaborateur'],
-    'RI_420'    : [u'editor',                   u'editor',                   u'réviseur'],
-    'RI_421'    : [u'mediator',                 u'mediator',                 u'médiateur'],
-    'RI_422'    : [u'rights_holder',            u'rightsHolder',             u'détenteurDroits']
+    'RI_408': [u'resource_provider', u'resourceProvider', u'fournisseurRessource'],
+    'RI_409': [u'custodian', u'custodian', u'conservateur'],
+    'RI_410': [u'owner', u'owner', u'propriétaire'],
+    'RI_411': [u'user', u'user', u'utilisateur'],
+    'RI_412': [u'distributor', u'distributor', u'distributeur'],
+    'RI_413': [u'originator', u'originator', u'créateur'],
+    'RI_414': [u'point_of_contact', u'pointOfContact', u'contact'],
+    'RI_415': [u'principal_investigator', u'principalInvestigator', u'chercheurPrincipal'],
+    'RI_416': [u'processor', u'processor', u'traiteur'],
+    'RI_417': [u'publisher', u'publisher', u'éditeur'],
+    'RI_418': [u'author', u'author', u'auteur'],
+    'RI_419': [u'collaborator', u'collaborator', u'collaborateur'],
+    'RI_420': [u'editor', u'editor', u'réviseur'],
+    'RI_421': [u'mediator', u'mediator', u'médiateur'],
+    'RI_422': [u'rights_holder', u'rightsHolder', u'détenteurDroits']
 }
 
-#Status
-#IC_106    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_106
+# Status
+# IC_106    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_106
 napMD_ProgressCode = {
-    'RI_593'    : [u'completed',                u'completed',                u'complété'],
-    'RI_594'    : [u'historical_archive',       u'historicalArchive',        u'archiveHistorique'],
-    'RI_595'    : [u'obsolete',                 u'obsolete',                 u'périmé'],
-    'RI_596'    : [u'ongoing',                  u'onGoing',                  u'enContinue'],
-    'RI_597'    : [u'planned',                  u'planned',                  u'planifié'],
-    'RI_598'    : [u'required',                 u'required',                 u'requis'],
-    'RI_599'    : [u'under_development',        u'underDevelopment',         u'enProduction'],
-    'RI_600'    : [u'proposed',                 u'proposed',                 u'proposé']
+    'RI_593': [u'completed', u'completed', u'complété'],
+    'RI_594': [u'historical_archive', u'historicalArchive', u'archiveHistorique'],
+    'RI_595': [u'obsolete', u'obsolete', u'périmé'],
+    'RI_596': [u'ongoing', u'onGoing', u'enContinue'],
+    'RI_597': [u'planned', u'planned', u'planifié'],
+    'RI_598': [u'required', u'required', u'requis'],
+    'RI_599': [u'under_development', u'underDevelopment', u'enProduction'],
+    'RI_600': [u'proposed', u'proposed', u'proposé']
 }
 
-#Association Type
-#IC_92    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_92
+# Association Type
+# IC_92    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_92
 napDS_AssociationTypeCode = {
-    'RI_428'    : [u'crossReference',           u'référenceCroisée',                u'cross_reference'],
-    'RI_429'    : [u'largerWorkCitation',       u'référenceGénérique',              u'larger_work_citation'],
-    'RI_430'    : [u'partOfSeamlessDatabase',   u'partieDeBaseDeDonnéesContinue',   u'part_of_seamless_database'],
-    'RI_431'    : [u'source',                   u'source',                          u'source'],
-    'RI_432'    : [u'stereoMate',               u'stéréoAssociée',                  u'stereo_mate'],
-    'RI_433'    : [u'isComposedOf',             u'estComposéDe',                    u'is_composed_of']
+    'RI_428': [u'crossReference', u'référenceCroisée', u'cross_reference'],
+    'RI_429': [u'largerWorkCitation', u'référenceGénérique', u'larger_work_citation'],
+    'RI_430': [u'partOfSeamlessDatabase', u'partieDeBaseDeDonnéesContinue', u'part_of_seamless_database'],
+    'RI_431': [u'source', u'source', u'source'],
+    'RI_432': [u'stereoMate', u'stéréoAssociée', u'stereo_mate'],
+    'RI_433': [u'isComposedOf', u'estComposéDe', u'is_composed_of']
 }
 
-#spatialRespresentionType
-#IC_109    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_109
+# spatialRespresentionType
+# IC_109    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_109
 napMD_SpatialRepresentationTypeCode = {
-    'RI_635'    : [u'vector',                   u'vector',                   u'vecteur'],
-    'RI_636'    : [u'grid',                     u'grid',                     u'grille'],
-    'RI_637'    : [u'text_table',               u'textTable',                u'texteTable'],
-    'RI_638'    : [u'tin',                      u'tin',                      u'tin'],
-    'RI_639'    : [u'stereo_model',             u'stereoModel',              u'stéréomodèle'],
-    'RI_640'    : [u'video',                    u'vidéo']
+    'RI_635': [u'vector', u'vector', u'vecteur'],
+    'RI_636': [u'grid', u'grid', u'grille'],
+    'RI_637': [u'text_table', u'textTable', u'texteTable'],
+    'RI_638': [u'tin', u'tin', u'tin'],
+    'RI_639': [u'stereo_model', u'stereoModel', u'stéréomodèle'],
+    'RI_640': [u'video', u'vidéo']
 }
 
-#maintenanceAndUpdateFrequency
-#IC_102    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_102
+# maintenanceAndUpdateFrequency
+# IC_102    http://nap.geogratis.gc.ca/metadata/register/registerItemClasses-eng.html#IC_102
 napMD_MaintenanceFrequencyCode = {
-    'RI_532'    :[u'continual',                u'continue',         u'continual'],
-    'RI_533'    :[u'daily',                    u'quotidien',        u'P1D'],
-    'RI_534'    :[u'weekly',                   u'hebdomadaire',     u'P1W'],
-    'RI_535'    :[u'fortnightly',              u'quinzomadaire',    u'P2W'],
-    'RI_536'    :[u'monthly',                  u'mensuel',          u'P1M'],
-    'RI_537'    :[u'quarterly',                u'trimestriel',      u'P3M'],
-    'RI_538'    :[u'biannually',               u'semestriel',       u'P6M'],
-    'RI_539'    :[u'annually',                 u'annuel',           u'P1Y'],
-    'RI_540'    :[u'asNeeded',                 u'auBesoin',         u'as_needed'],
-    'RI_541'    :[u'irregular',                u'irrégulier',       u'irregular'],
-    'RI_542'    :[u'notPlanned',               u'nonPlanifié',      u'not_planned'],
-    'RI_543'    :[u'unknown',                  u'inconnu',          u'unknown'],
-    'RI_544'    :[u'semimonthly',              u'bimensuel',        u'P2M'],
+    'RI_532': [u'continual', u'continue', u'continual'],
+    'RI_533': [u'daily', u'quotidien', u'P1D'],
+    'RI_534': [u'weekly', u'hebdomadaire', u'P1W'],
+    'RI_535': [u'fortnightly', u'quinzomadaire', u'P2W'],
+    'RI_536': [u'monthly', u'mensuel', u'P1M'],
+    'RI_537': [u'quarterly', u'trimestriel', u'P3M'],
+    'RI_538': [u'biannually', u'semestriel', u'P6M'],
+    'RI_539': [u'annually', u'annuel', u'P1Y'],
+    'RI_540': [u'asNeeded', u'auBesoin', u'as_needed'],
+    'RI_541': [u'irregular', u'irrégulier', u'irregular'],
+    'RI_542': [u'notPlanned', u'nonPlanifié', u'not_planned'],
+    'RI_543': [u'unknown', u'inconnu', u'unknown'],
+    'RI_544': [u'semimonthly', u'bimensuel', u'P2M'],
 }
 
 # # In the mapping doc but not used
@@ -2033,394 +2475,423 @@ napMD_MaintenanceFrequencyCode = {
 # }
 
 napMD_KeywordTypeCode = {
-    'farming'                                : [u'farming',                              u'Farming',                                  u'Agriculture'],
-    'biota'                                  : [u'biota',                                u'Biota',                                    u'Biote'],
-    'boundaries'                             : [u'boundaries',                           u'Boundaries',                               u'Frontières'],
-    'climatologyMeteorologyAtmosphere'       : [u'climatology_meterology_atmosphere',    u'Climatology / Meteorology / Atmosphere',   u'Climatologie / Météorologie / Atmosphère'],
-    'economy'                                : [u'economy',                              u'Economy',                                  u'Économie'],
-    'elevation'                              : [u'elevation',                            u'Elevation',                                u'Élévation'],
-    'environment'                            : [u'environment',                          u'Environment',                              u'Environnement'],
-    'geoscientificInformation'               : [u'geoscientific_information',            u'Geoscientific Information',                u'Information géoscientifique'],
-    'health'                                 : [u'health',                               u'Health',                                   u'Santé'],
-    'imageryBaseMapsEarthCover'              : [u'imagery_base_maps_earth_cover',        u'Imagery Base Maps Earth Cover',            u'Imagerie carte de base couverture terrestre'],
-    'intelligenceMilitary'                   : [u'intelligence_military',                u'Intelligence Military',                    u'Renseignements militaires'],
-    'inlandWaters'                           : [u'inland_waters',                        u'Inland Waters',                            u'Eaux intérieures'],
-    'location'                               : [u'location',                             u'Location',                                 u'Localisation'],
-    'oceans'                                 : [u'oceans',                               u'Oceans',                                   u'Océans'],
-    'planningCadastre'                       : [u'planning_cadastre',                    u'Planning Cadastre',                        u'Aménagement cadastre'],
-    'society'                                : [u'society',                              u'Society',                                  u'Société'],
-    'structure'                              : [u'structure',                            u'Structure',                                u'Structures'],
-    'transportation'                         : [u'transport',                            u'Transportation',                           u'Transport'],
-    'utilitiesCommunication'                 : [u'utilities_communication',              u'Utilities Communication',                  u'Services communication'],
+    'farming': [u'farming', u'Farming', u'Agriculture'],
+    'biota': [u'biota', u'Biota', u'Biote'],
+    'boundaries': [u'boundaries', u'Boundaries', u'Frontières'],
+    'climatologyMeteorologyAtmosphere': [u'climatology_meterology_atmosphere',
+                                         u'Climatology / Meteorology / Atmosphere',
+                                         u'Climatologie / Météorologie / Atmosphère'],
+    'economy': [u'economy', u'Economy', u'Économie'],
+    'elevation': [u'elevation', u'Elevation', u'Élévation'],
+    'environment': [u'environment', u'Environment', u'Environnement'],
+    'geoscientificInformation': [u'geoscientific_information', u'Geoscientific Information',
+                                 u'Information géoscientifique'],
+    'health': [u'health', u'Health', u'Santé'],
+    'imageryBaseMapsEarthCover': [u'imagery_base_maps_earth_cover', u'Imagery Base Maps Earth Cover',
+                                  u'Imagerie carte de base couverture terrestre'],
+    'intelligenceMilitary': [u'intelligence_military', u'Intelligence Military', u'Renseignements militaires'],
+    'inlandWaters': [u'inland_waters', u'Inland Waters', u'Eaux intérieures'],
+    'location': [u'location', u'Location', u'Localisation'],
+    'oceans': [u'oceans', u'Oceans', u'Océans'],
+    'planningCadastre': [u'planning_cadastre', u'Planning Cadastre', u'Aménagement cadastre'],
+    'society': [u'society', u'Society', u'Société'],
+    'structure': [u'structure', u'Structure', u'Structures'],
+    'transportation': [u'transport', u'Transportation', u'Transport'],
+    'utilitiesCommunication': [u'utilities_communication', u'Utilities Communication', u'Services communication'],
     # French Equivalents
-    'agriculture'                            : [u'farming',                              u'Farming',                                  u'Agriculture'],
-    'biote'                                  : [u'biota',                                u'Biota',                                    u'Biote'],
-    'frontières'                             : [u'boundaries',                           u'Boundaries',                               u'Frontières'],
-    'limatologieMétéorologieAtmosphère'      : [u'climatology_meterology_atmosphere',    u'Climatology / Meteorology / Atmosphere',   u'Climatologie / Météorologie / Atmosphère'],
-    'économie'                               : [u'economy',                              u'Economy',                                  u'Économie'],
-    'élévation'                              : [u'elevation',                            u'Elevation',                                u'Élévation'],
-    'environnement'                          : [u'environment',                          u'Environment',                              u'Environnement'],
-    'informationGéoscientifique'             : [u'geoscientific_information',            u'Geoscientific Information',                u'Information géoscientifique'],
-    'santé'                                  : [u'health',                               u'Health',                                   u'Santé'],
-    'imagerieCarteDeBaseCouvertureTerrestre' : [u'imagery_base_maps_earth_cover',        u'Imagery Base Maps Earth Cover',            u'Imagerie carte de base couverture terrestre'],
-    'renseignementsMilitaires'               : [u'intelligence_military',                u'Intelligence Military',                    u'Renseignements militaires'],
-    'eauxIntérieures'                        : [u'inland_waters',                        u'Inland Waters',                            u'Eaux intérieures'],
-    'localisation'                           : [u'location',                             u'Location',                                 u'Localisation'],
-    'océans'                                 : [u'oceans',                               u'Oceans',                                   u'Océans'],
-    'aménagementCadastre'                    : [u'planning_cadastre',                    u'Planning Cadastre',                        u'Aménagement cadastre'],
-    'société'                                : [u'society',                              u'Society',                                  u'Société'],
-    'structures'                             : [u'structure',                            u'Structure',                                u'Structures'],
-    'transport'                              : [u'transport',                            u'Transportation',                           u'Transport'],
-    'servicesCommunication'                  : [u'utilities_communication',              u'Utilities Communication',                  u'Services communication']
+    'agriculture': [u'farming', u'Farming', u'Agriculture'],
+    'biote': [u'biota', u'Biota', u'Biote'],
+    'frontières': [u'boundaries', u'Boundaries', u'Frontières'],
+    'limatologieMétéorologieAtmosphère': [u'climatology_meterology_atmosphere',
+                                          u'Climatology / Meteorology / Atmosphere',
+                                          u'Climatologie / Météorologie / Atmosphère'],
+    'économie': [u'economy', u'Economy', u'Économie'],
+    'élévation': [u'elevation', u'Elevation', u'Élévation'],
+    'environnement': [u'environment', u'Environment', u'Environnement'],
+    'informationGéoscientifique': [u'geoscientific_information', u'Geoscientific Information',
+                                   u'Information géoscientifique'],
+    'santé': [u'health', u'Health', u'Santé'],
+    'imagerieCarteDeBaseCouvertureTerrestre': [u'imagery_base_maps_earth_cover', u'Imagery Base Maps Earth Cover',
+                                               u'Imagerie carte de base couverture terrestre'],
+    'renseignementsMilitaires': [u'intelligence_military', u'Intelligence Military', u'Renseignements militaires'],
+    'eauxIntérieures': [u'inland_waters', u'Inland Waters', u'Eaux intérieures'],
+    'localisation': [u'location', u'Location', u'Localisation'],
+    'océans': [u'oceans', u'Oceans', u'Océans'],
+    'aménagementCadastre': [u'planning_cadastre', u'Planning Cadastre', u'Aménagement cadastre'],
+    'société': [u'society', u'Society', u'Société'],
+    'structures': [u'structure', u'Structure', u'Structures'],
+    'transport': [u'transport', u'Transportation', u'Transport'],
+    'servicesCommunication': [u'utilities_communication', u'Utilities Communication', u'Services communication']
 }
 
-GC_Registry_of_Organization_en = ["^Government of Canada;","^Government of Alberta;", "^Government of British Columbia;"]
+GC_Registry_of_Organization_en = ["^Government of Canada;", "^Government of Alberta;",
+                                "^Government of British Columbia;", "^Government of New Brunswick;",
+                                "^Government of Quebec;", "^Government of Yukon;",
+                                "^Government and Municipalities of Québec;",
+                                "^Government and Municipalities of Quebec;",
+                                "^Québec Government and Municipalities;",
+                                "^Quebec Government and Municipalities;",
+                                "^Government of Ontario", "^Government of Nova Scotia",
+                                "^Government of Manitoba", "^Government of Newfoundland and Labrador",
+                                "^Government of Saskatchewan", "^Government of Northwest Territories",
+                                "^Government of Nunavut", "^Government of Prince Edward Island"                                
+                                ]
 
-GC_Registry_of_Organization_fr = ["^Gouvernement du Canada;","^Gouvernement de l\\'Alberta;","^Gouvernement de la Colombie-Britannique;"]
-
-
+GC_Registry_of_Organization_fr = ["^Gouvernement du Canada;", "^Gouvernement de l\\'Alberta;",
+                                "^Gouvernement de la Colombie-Britannique;", "^Gouvernement du Nouveau-Brunswick;",
+                                "^Gouvernement du Québec;", "^Gouvernement du Yukon;",
+                                "^Gouvernement et Municipalités du Québec;",
+                                "^Gouvernement de l\\'Ontario", "^Gouvernement de la Nouvelle-Ecosse",
+                                "^Gouvernement du Manitoba", "^Gouvernement de Terre-Neuve et Labrador",
+                                "^Gouvernement de la Saskatchewan", "^Gouvernement Des Territoires du Nord-Ouest",
+                                "^Gouvernement du Nunavut", "^Gouvernement de l'Île-du-Prince-Edouard"]
 
 GC_Registry_of_Applied_Terms = {
-    'Aboriginal Affairs and Northern Development Canada'        : [u'Aboriginal Affairs and Northern Development Canada',u'AANDC',u'Affaires autochtones et Développement du Nord Canada',u'AADNC',u'249'],
-    'Affaires autochtones et Développement du Nord Canada'      : [u'Aboriginal Affairs and Northern Development Canada',u'AANDC',u'Affaires autochtones et Développement du Nord Canada',u'AADNC',u'249'],
-    'Affaires autochtones et du Nord Canada'                    : [u'Aboriginal Affairs and Northern Development Canada',u'AANDC',u'Affaires autochtones et Développement du Nord Canada',u'AADNC',u'249'],
-    'Indigenous and Northern Affairs Canada'                    : [u'Aboriginal Affairs and Northern Development Canada',u'AANDC',u'Affaires autochtones et Développement du Nord Canada',u'AADNC',u'249'],
-    # 'Affaires autochtones et du Nord Canada'                  : [u'Indigenous and Northern Affairs Canada',u'INAC',u'Affaires autochtones et du Nord Canada',u'AANC',u'249'],
-    # 'Indigenous and Northern Affairs Canada'                  : [u'Indigenous and Northern Affairs Canada',u'INAC',u'Affaires autochtones et du Nord Canada',u'AANC',u'249'],
-    'Crown-Indigenous Relations and Northern Affairs Canada'    : [u'Crown-Indigenous Relations and Northern Affairs Canada',u'AANDC',u'Relations Couronne-Autochtones et Affaires du Nord Canada',u'AADNC',u'249'],
-    'Relations Couronne-Autochtones et Affaires du Nord Canada' : [u'Crown-Indigenous Relations and Northern Affairs Canada',u'AANDC',u'Relations Couronne-Autochtones et Affaires du Nord Canada',u'AADNC',u'249'],
-
-    'Environment Canada'                                        : [u'Environment Canada',u'EC',u'Environnement Canada',u'EC',u'99'],
-    'Environnement Canada'                                      : [u'Environment Canada',u'EC',u'Environnement Canada',u'EC',u'99'],
-    'Environment and Climate Change Canada'                     : [u'Environment Canada',u'EC',u'Environnement Canada',u'EC',u'99'],
-    'Environnement et Changement climatique Canada'             : [u'Environment Canada',u'EC',u'Environnement Canada',u'EC',u'99'],
-    # 'Environment and Climate Change Canada'                   : [u'Environment and Climate Change Canada',u'ECCC',u'Environnement et Changement climatique Canada',u'ECCC',u'99'],
-    # 'Environnement et Changement climatique Canada'           : [u'Environment and Climate Change Canada',u'ECCC',u'Environnement et Changement climatique Canada',u'ECCC',u'99'],
-
-    'Foreign Affairs and International Trade Canada'            : [u'Foreign Affairs and International Trade Canada',u'DFAIT',u'Affaires étrangères et Commerce international Canada',u'MAECI',u'64'],
-    'Affaires étrangères et Commerce international Canada'      : [u'Foreign Affairs and International Trade Canada',u'DFAIT',u'Affaires étrangères et Commerce international Canada',u'MAECI',u'64'],
-    'Affaires mondiales Canada'                                 : [u'Foreign Affairs and International Trade Canada',u'DFAIT',u'Affaires étrangères et Commerce international Canada',u'MAECI',u'64'],
-    'Global Affairs Canada'                                     : [u'Foreign Affairs and International Trade Canada',u'DFAIT',u'Affaires étrangères et Commerce international Canada',u'MAECI',u'64'],
-    # 'Affaires mondiales Canada'                               : [u'Global Affairs Canada',u'GAC',u'Affaires mondiales Canada',u'AMC',u'64'],
-    # 'Global Affairs Canada'                                   : [u'Global Affairs Canada',u'GAC',u'Affaires mondiales Canada',u'AMC',u'64'],
-
-    'Travaux publics et Services gouvernementaux Canada'        : [u'Public Works and Government Services Canada',u'PWGSC',u'Travaux publics et Services gouvernementaux Canada',u'TPSGC',u'81'],
-    'Public Works and Government Services Canada'               : [u'Public Works and Government Services Canada',u'PWGSC',u'Travaux publics et Services gouvernementaux Canada',u'TPSGC',u'81'],
-    'Public Services and Procurement Canada'                    : [u'Public Works and Government Services Canada',u'PWGSC',u'Travaux publics et Services gouvernementaux Canada',u'TPSGC',u'81'],
-    'Services publics et Approvisionnement Canada'              : [u'Public Works and Government Services Canada',u'PWGSC',u'Travaux publics et Services gouvernementaux Canada',u'TPSGC',u'81'],
-    # 'Public Services and Procurement Canada'                  : [u'Public Services and Procurement Canada',u'PSPC',u'Services publics et Approvisionnement Canada',u'SPAC',u'81'],
-    # 'Services publics et Approvisionnement Canada'            : [u'Public Services and Procurement Canada',u'PSPC',u'Services publics et Approvisionnement Canada',u'SPAC',u'81'],
-
-    'Industry Canada'                                           : [u'Industry Canada',u'IC',u'Industrie Canada',u'IC',u'230'],
-    'Industrie Canada'                                          : [u'Industry Canada',u'IC',u'Industrie Canada',u'IC',u'230'],
-    'Innovation, Science and Economic Development Canada'       : [u'Industry Canada',u'IC',u'Industrie Canada',u'IC',u'230'],
-    'Innovation, Sciences et Développement économique Canada'   : [u'Industry Canada',u'IC',u'Industrie Canada',u'IC',u'230'],
-    # 'Innovation                                               , Science and Economic Development Canada'                                                                                                                                                    : [u'Innovation, Science and Economic Development Canada',u'ISED',u'Innovation, Sciences et Développement économique Canada',u'ISDE',u'230'],
-    # 'Innovation                                               , Sciences et Développement économique Canada'                                                                                                                                                    : [u'Innovation, Science and Economic Development Canada',u'ISED',u'Innovation, Sciences et Développement économique Canada',u'ISDE',u'230'],
-
-    'Citizenship and Immigration Canada'                        : [u'Citizenship and Immigration Canada',u'CIC',u'Citoyenneté et Immigration Canada',u'CIC',u'94'],
-    'Citoyenneté et Immigration Canada'                         : [u'Citizenship and Immigration Canada',u'CIC',u'Citoyenneté et Immigration Canada',u'CIC',u'94'],
-    'Immigration, Refugees and Citizenship Canada'              : [u'Citizenship and Immigration Canada',u'CIC',u'Citoyenneté et Immigration Canada',u'CIC',u'94'],
-    'Immigration, Réfugiés et Citoyenneté Canada'               : [u'Citizenship and Immigration Canada',u'CIC',u'Citoyenneté et Immigration Canada',u'CIC',u'94'],
-    # 'Immigration                                              , Refugees and Citizenship Canada'                                                                                                                  : [u'Immigration, Refugees and Citizenship Canada',u'IRCC',u'Immigration, Réfugiés et Citoyenneté Canada',u'IRCC',u'94'],
-    # 'Immigration                                              , Réfugiés et Citoyenneté Canada'                                                                                                                                                   : [u'Immigration, Refugees and Citizenship Canada',u'IRCC',u'Immigration, Réfugiés et Citoyenneté Canada',u'IRCC',u'94'],
-
-
-    'Administration de pilotage de l\'Atlantique Canada'                                                                                                            : [u'Atlantic Pilotage Authority Canada',u'APA',u'Administration de pilotage de l\'Atlantique Canada',u'APA',u'221'],
-    'Agence canadienne d\'inspection des aliments'                                                                                                                  : [u'Canadian Food Inspection Agency',u'CFIA',u'Agence canadienne d\'inspection des aliments',u'ACIA',u'206'],
-    'Agence canadienne d\'évaluation environnementale'                                                                                                              : [u'Canadian Environmental Assessment Agency',u'CEAA',u'Agence canadienne d\'évaluation environnementale',u'ACEE',u'270'],
-    'Agence canadienne pour l\'incitation à la réduction des émissions'                                                                                             : [u'Canada Emission Reduction Incentives Agency',u'',u'Agence canadienne pour l\'incitation à la réduction des émissions',u'',u'277'],
-    'Agence fédérale de développement économique pour le Sud de l\'Ontario'                                                                                         : [u'Federal Economic Development Agency for Southern Ontario',u'FedDev Ontario',u'Agence fédérale de développement économique pour le Sud de l\'Ontario',u'FedDev Ontario',u'21'],
-    'Centre canadien d\'hygiène et de sécurité au travail'                                                                                                          : [u'Canadian Centre for Occupational Health and Safety',u'CCOHS',u'Centre canadien d\'hygiène et de sécurité au travail',u'CCHST',u'35'],
-    'Centre d\'analyse des opérations et déclarations financières du Canada'                                                                                        : [u'Financial Transactions and Reports Analysis Centre of Canada',u'FINTRAC',u'Centre d\'analyse des opérations et déclarations financières du Canada',u'CANAFE',u'127'],
-    'Comité externe d\'examen de la GRC'                                                                                                                            : [u'RCMP External Review Committee',u'ERC',u'Comité externe d\'examen de la GRC',u'CEE',u'232'],
-    'Comité externe d\'examen des griefs militaires'                                                                                                                : [u'Military Grievances External Review Committee',u'MGERC',u'Comité externe d\'examen des griefs militaires',u'CEEGM',u'43'],
-    'Commissariat à l\'intégrité du secteur public du Canada'                                                                                                       : [u'Office of the Public Sector Integrity Commissioner of Canada',u'PSIC',u'Commissariat à l\'intégrité du secteur public du Canada',u'ISPC',u'210'],
-    'Commission d\'examen des plaintes concernant la police militaire du Canada'                                                                                    : [u'Military Police Complaints Commission of Canada',u'MPCC',u'Commission d\'examen des plaintes concernant la police militaire du Canada',u'CPPM',u'66'],
-    'Commission de l\'assurance-emploi du Canada'                                                                                                                   : [u'Canada Employment Insurance Commission',u'CEIC',u'Commission de l\'assurance-emploi du Canada',u'CAEC',u'196'],
-    'Commission de l\'immigration et du statut de réfugié du Canada'                                                                                                : [u'Immigration and Refugee Board of Canada',u'IRB',u'Commission de l\'immigration et du statut de réfugié du Canada',u'CISR',u'5'],
-    'Commission du droit d\'auteur Canada'                                                                                                                          : [u'Copyright Board Canada',u'CB',u'Commission du droit d\'auteur Canada',u'CDA',u'116'],
-    'Conseil d\'examen du prix des médicaments brevetés Canada'                                                                                                     : [u'Patented Medicine Prices Review Board Canada',u'',u'Conseil d\'examen du prix des médicaments brevetés Canada',u'',u'15'],
-    'Diversification de l\'économie de l\'Ouest Canada'                                                                                                             : [u'Western Economic Diversification Canada',u'WD',u'Diversification de l\'économie de l\'Ouest Canada',u'DEO',u'55'],
-    'L\'Enquêteur correctionnel Canada'                                                                                                                             : [u'The Correctional Investigator Canada',u'OCI',u'L\'Enquêteur correctionnel Canada',u'BEC',u'5555'],
-    'Musée canadien de l\'histoire'                                                                                                                                 : [u'Canadian Museum of History',u'CMH',u'Musée canadien de l\'histoire',u'MCH',u'263'],
-    'Musée canadien de l\'immigration du Quai 21'                                                                                                                   : [u'Canadian Museum of Immigration at Pier 21',u'CMIP',u'Musée canadien de l\'immigration du Quai 21',u'MCIQ',u'2'],
-    'Office de commercialisation du poisson d\'eau douce'                                                                                                           : [u'Freshwater Fish Marketing Corporation',u'FFMC',u'Office de commercialisation du poisson d\'eau douce',u'OCPED',u'252'],
-    'Office national de l\'énergie'                                                                                                                                 : [u'National Energy Board',u'NEB',u'Office national de l\'énergie',u'ONE',u'239'],
-    'Registraire de la Cour suprême du Canada et le secteur de l\'administration publique fédérale nommé en vertu du paragraphe 12(2) de la Loi sur la Cour suprême': [u'Registrar of the Supreme Court of Canada and that portion of the federal public administration appointed under subsection 12(2) of the Supreme Court Act',u'SCC',u'Registraire de la Cour suprême du Canada et le secteur de l\'administration publique fédérale nommé en vertu du paragraphe 12(2) de la Loi sur la Cour suprême',u'CSC',u'63'],
-    'Service canadien d\'appui aux tribunaux administratifs'                                                                                                        : [u'Administrative Tribunals Support Service of Canada',u'ATSSC',u'Service canadien d\'appui aux tribunaux administratifs',u'SCDATA',u'8888888'],
-    'Société canadienne d\'hypothèques et de logement'                                                                                                              : [u'Canada Mortgage and Housing Corporation',u'CMHC',u'Société canadienne d\'hypothèques et de logement',u'SCHL',u'87'],
-    'Société d\'assurance-dépôts du Canada'                                                                                                                         : [u'Canada Deposit Insurance Corporation',u'CDIC',u'Société d\'assurance-dépôts du Canada',u'SADC',u'273'],
-    'Société d\'expansion du Cap-Breton'                                                                                                                            : [u'Enterprise Cape Breton Corporation',u'',u'Société d\'expansion du Cap-Breton',u'',u'203'],
-    'Tribunal d\'appel des transports du Canada'                                                                                                                    : [u'Transportation Appeal Tribunal of Canada',u'TATC',u'Tribunal d\'appel des transports du Canada',u'TATC',u'96'],
-    'Énergie atomique du Canada'                                                                                                                                    : [u'Limitée',u'Atomic Energy of Canada Limited',u'',u'Énergie atomique du Canada',u'Limitée',u'',u'138'],
-    'Administration canadienne de la sûreté du transport aérien'                                                                                                    : [u'Canadian Air Transport Security Authority',u'CATSA',u'Administration canadienne de la sûreté du transport aérien',u'ACSTA',u'250'],
-    'Administration de pilotage des Grands Lacs Canada'                                                                                                             : [u'Great Lakes Pilotage Authority Canada',u'GLPA',u'Administration de pilotage des Grands Lacs Canada',u'APGL',u'261'],
-    'Administration de pilotage des Laurentides Canada'                                                                                                             : [u'Laurentian Pilotage Authority Canada',u'LPA',u'Administration de pilotage des Laurentides Canada',u'APL',u'213'],
-    'Administration de pilotage du Pacifique Canada'                                                                                                                : [u'Pacific Pilotage Authority Canada',u'PPA',u'Administration de pilotage du Pacifique Canada',u'APP',u'165'],
-    'Administration du pipe-line du Nord Canada'                                                                                                                    : [u'Northern Pipeline Agency Canada',u'NPA',u'Administration du pipe-line du Nord Canada',u'APN',u'10'],
-    'Administrative Tribunals Support Service of Canada'                                                                                                            : [u'Administrative Tribunals Support Service of Canada',u'ATSSC',u'Service canadien d\'appui aux tribunaux administratifs',u'SCDATA',u'8888888'],
-    'Agence canadienne de développement économique du Nord'                                                                                                         : [u'Canadian Northern Economic Development Agency',u'CanNor',u'Agence canadienne de développement économique du Nord',u'CanNor',u'4'],
-    'Agence de développement économique du Canada pour les régions du Québec'                                                                                        : [u'Economic Development Agency of Canada for the Regions of Quebec',u'CED',u'Agence de développement économique du Canada pour les régions du Québec',u'DEC',u'93'],
-    'Agence de la consommation en matière financière du Canada'                                                                                                      : [u'Financial Consumer Agency of Canada',u'FCAC',u'Agence de la consommation en matière financière du Canada',u'ACFC',u'224'],
-    'Agence de la santé publique du Canada'                                                                                                                          : [u'Public Health Agency of Canada',u'PHAC',u'Agence de la santé publique du Canada',u'ASPC',u'135'],
-    'Agence de promotion économique du Canada atlantique'                                                                                                            : [u'Atlantic Canada Opportunities Agency',u'ACOA',u'Agence de promotion économique du Canada atlantique',u'APECA',u'276'],
-    'Agence des services frontaliers du Canada'                                                                                                                      : [u'Canada Border Services Agency',u'CBSA',u'Agence des services frontaliers du Canada',u'ASFC',u'229'],
-    'Agence du revenu du Canada'                                                                                                                                     : [u'Canada Revenue Agency',u'CRA',u'Agence du revenu du Canada',u'ARC',u'47'],
-    'Agence spatiale canadienne'                                                                                                                                     : [u'Canadian Space Agency',u'CSA',u'Agence spatiale canadienne',u'ASC',u'3'],
-    'Agriculture and Agri-Food Canada'                                                                                                                               : [u'Agriculture and Agri-Food Canada',u'AAFC',u'Agriculture et Agroalimentaire Canada',u'AAC',u'235'],
-    'Agriculture et Agroalimentaire Canada'                                                                                                                          : [u'Agriculture and Agri-Food Canada',u'AAFC',u'Agriculture et Agroalimentaire Canada',u'AAC',u'235'],
-    'Anciens Combattants Canada'                                                                                                                                     : [u'Veterans Affairs Canada',u'VAC',u'Anciens Combattants Canada',u'ACC',u'189'],
-    'Atlantic Canada Opportunities Agency'                                                                                                                           : [u'Atlantic Canada Opportunities Agency',u'ACOA',u'Agence de promotion économique du Canada atlantique',u'APECA',u'276'],
-    'Atlantic Pilotage Authority Canada'                                                                                                                             : [u'Atlantic Pilotage Authority Canada',u'APA',u'Administration de pilotage de l\'Atlantique Canada',u'APA',u'221'],
-    'Atomic Energy of Canada Limited'                                                                                                                                : [u'Atomic Energy of Canada Limited',u'',u'Énergie atomique du Canada',u'Limitée',u'',u'138'],
-    'Autorité du pont Windsor-Détroit'                                                                                                                               : [u'Windsor-Detroit Bridge Authority',u'',u'Autorité du pont Windsor-Détroit',u'',u'55553'],
-    'Banque de développement du Canada'                                                                                                                              : [u'Business Development Bank of Canada',u'BDC',u'Banque de développement du Canada',u'BDC',u'150'],
-    'Bibliothèque du Parlement'                                                                                                                                      : [u'Library of Parliament',u'LP',u'Bibliothèque du Parlement',u'BP',u'55555'],
-    'Bibliothèque et Archives Canada'                                                                                                                                : [u'Library and Archives Canada',u'LAC',u'Bibliothèque et Archives Canada',u'BAC',u'129'],
-    'Bureau de la sécurité des transports du Canada'                                                                                                                 : [u'Transportation Safety Board of Canada',u'TSB',u'Bureau de la sécurité des transports du Canada',u'BST',u'215'],
-    'Bureau du commissaire du Centre de la sécurité des télécommunications'                                                                                          : [u'Office of the Communications Security Establishment Commissioner',u'OCSEC',u'Bureau du commissaire du Centre de la sécurité des télécommunications',u'BCCST',u'279'],
-    'Bureau du Conseil privé'                                                                                                                                        : [u'Privy Council Office',u'',u'Bureau du Conseil privé',u'',u'173'],
-    'Bureau du secrétaire du gouverneur général'                                                                                                                     : [u'Office of the Secretary to the Governor General',u'OSGG',u'Bureau du secrétaire du gouverneur général',u'BSGG',u'5557'],
-    'Bureau du surintendant des institutions financières Canada'                                                                                                     : [u'Office of the Superintendent of Financial Institutions Canada',u'OSFI',u'Bureau du surintendant des institutions financières Canada',u'BSIF',u'184'],
-    'Bureau du vérificateur général du Canada'                                                                                                                       : [u'Office of the Auditor General of Canada',u'OAG',u'Bureau du vérificateur général du Canada',u'BVG',u'125'],
-    'Business Development Bank of Canada'                                                                                                                            : [u'Business Development Bank of Canada',u'BDC',u'Banque de développement du Canada',u'BDC',u'150'],
-    'Canada Border Services Agency'                                                                                                                                  : [u'Canada Border Services Agency',u'CBSA',u'Agence des services frontaliers du Canada',u'ASFC',u'229'],
-    'Canada Deposit Insurance Corporation'                                                                                                                           : [u'Canada Deposit Insurance Corporation',u'CDIC',u'Société d\'assurance-dépôts du Canada',u'SADC',u'273'],
-    'Canada Development Investment Corporation'                                                                                                                      : [u'Canada Development Investment Corporation',u'CDEV',u'Corporation de développement des investissements du Canada',u'CDEV',u'148'],
-    'Canada Emission Reduction Incentives Agency'                                                                                                                    : [u'Canada Emission Reduction Incentives Agency',u'',u'Agence canadienne pour l\'incitation à la réduction des émissions',u'',u'277'],
-    'Canada Employment Insurance Commission'                                                                                                                         : [u'Canada Employment Insurance Commission',u'CEIC',u'Commission de l\'assurance-emploi du Canada',u'CAEC',u'196'],
-    'Canada Industrial Relations Board'                                                                                                                              : [u'Canada Industrial Relations Board',u'CIRB',u'Conseil canadien des relations industrielles',u'CCRI',u'188'],
-    'Canada Lands Company Limited'                                                                                                                                   : [u'Canada Lands Company Limited',u'',u'Société immobilière du Canada Limitée',u'',u'82'],
-    'Canada Mortgage and Housing Corporation'                                                                                                                        : [u'Canada Mortgage and Housing Corporation',u'CMHC',u'Société canadienne d\'hypothèques et de logement',u'SCHL',u'87'],
-    'Canada Post'                                                                                                                                                    : [u'Canada Post',u'CPC',u'Postes Canada',u'SCP',u'83'],
-    'Canada Revenue Agency'                                                                                                                                          : [u'Canada Revenue Agency',u'CRA',u'Agence du revenu du Canada',u'ARC',u'47'],
-    'Canada School of Public Service'                                                                                                                                : [u'Canada School of Public Service',u'CSPS',u'École de la fonction publique du Canada',u'EFPC',u'73'],
-    'Canada Science and Technology Museum'                                                                                                                           : [u'Canada Science and Technology Museum',u'CSTM',u'Musée des sciences et de la technologie du Canada',u'MSTC',u'202'],
-    'Canadian Air Transport Security Authority'                                                                                                                      : [u'Canadian Air Transport Security Authority',u'CATSA',u'Administration canadienne de la sûreté du transport aérien',u'ACSTA',u'250'],
-    'Canadian Centre for Occupational Health and Safety'                                                                                                             : [u'Canadian Centre for Occupational Health and Safety',u'CCOHS',u'Centre canadien d\'hygiène et de sécurité au travail',u'CCHST',u'35'],
-    'Canadian Commercial Corporation'                                                                                                                                : [u'Canadian Commercial Corporation',u'CCC',u'Corporation commerciale canadienne',u'CCC',u'34'],
-    'Canadian Dairy Commission'                                                                                                                                      : [u'Canadian Dairy Commission',u'CDC',u'Commission canadienne du lait',u'CCL',u'151'],
-    'Canadian Environmental Assessment Agency'                                                                                                                       : [u'Canadian Environmental Assessment Agency',u'CEAA',u'Agence canadienne d\'évaluation environnementale',u'ACEE',u'270'],
-    'Canadian Food Inspection Agency'                                                                                                                                : [u'Canadian Food Inspection Agency',u'CFIA',u'Agence canadienne d\'inspection des aliments',u'ACIA',u'206'],
-    'Canadian Grain Commission'                                                                                                                                      : [u'Canadian Grain Commission',u'CGC',u'Commission canadienne des grains',u'CCG',u'169'],
-    'Canadian Heritage'                                                                                                                                              : [u'Canadian Heritage',u'PCH',u'Patrimoine canadien',u'PCH',u'16'],
-    'Canadian Human Rights Commission'                                                                                                                               : [u'Canadian Human Rights Commission',u'CHRC',u'Commission canadienne des droits de la personne',u'CCDP',u'113'],
-    'Canadian Institutes of Health Research'                                                                                                                         : [u'Canadian Institutes of Health Research',u'CIHR',u'Instituts de recherche en santé du Canada',u'IRSC',u'236'],
-    'Canadian Intergovernmental Conference Secretariat'                                                                                                              : [u'Canadian Intergovernmental Conference Secretariat',u'CICS',u'Secrétariat des conférences intergouvernementales canadiennes',u'SCIC',u'274'],
-    'Canadian International Trade Tribunal'                                                                                                                          : [u'Canadian International Trade Tribunal',u'CITT',u'Tribunal canadien du commerce extérieur',u'TCCE',u'175'],
-    'Canadian Museum for Human Rights'                                                                                                                               : [u'Canadian Museum for Human Rights',u'CMHR',u'Musée canadien pour les droits de la personne',u'MCDP',u'267'],
-    'Canadian Museum of History'                                                                                                                                     : [u'Canadian Museum of History',u'CMH',u'Musée canadien de l\'histoire',u'MCH',u'263'],
-    'Canadian Museum of Immigration at Pier 21'                                                                                                                      : [u'Canadian Museum of Immigration at Pier 21',u'CMIP',u'Musée canadien de l\'immigration du Quai 21',u'MCIQ',u'2'],
-    'Canadian Museum of Nature'                                                                                                                                      : [u'Canadian Museum of Nature',u'CMN',u'Musée canadien de la nature',u'MCN',u'57'],
-    'Canadian Northern Economic Development Agency'                                                                                                                  : [u'Canadian Northern Economic Development Agency',u'CanNor',u'Agence canadienne de développement économique du Nord',u'CanNor',u'4'],
-    'Canadian Nuclear Safety Commission'                                                                                                                             : [u'Canadian Nuclear Safety Commission',u'CNSC',u'Commission canadienne de sûreté nucléaire',u'CCSN',u'58'],
-    'Canadian Polar Commission'                                                                                                                                      : [u'Canadian Polar Commission',u'POLAR',u'Commission canadienne des affaires polaires',u'POLAIRE',u'143'],
-    'Canadian Radio-television and Telecommunications Commission'                                                                                                    : [u'Canadian Radio-television and Telecommunications Commission',u'CRTC',u'Conseil de la radiodiffusion et des télécommunications canadiennes',u'CRTC',u'126'],
-    'Canadian Security Intelligence Service'                                                                                                                         : [u'Canadian Security Intelligence Service',u'CSIS',u'Service canadien du renseignement de sécurité',u'SCRS',u'90'],
-    'Canadian Space Agency'                                                                                                                                          : [u'Canadian Space Agency',u'CSA',u'Agence spatiale canadienne',u'ASC',u'3'],
-    'Canadian Transportation Agency'                                                                                                                                 : [u'Canadian Transportation Agency',u'CTA',u'Office des transports du Canada',u'OTC',u'124'],
-    'Centre de la sécurité des télécommunications Canada'                                                                                                            : [u'Communications Security Establishment Canada',u'CSEC',u'Centre de la sécurité des télécommunications Canada',u'CSTC',u'156'],
-    'Civilian Review and Complaints Commission for the RCMP'                                                                                                         : [u'Civilian Review and Complaints Commission for the RCMP',u'CRCC',u'Commission civile d’examen et de traitement des plaintes relatives à la GRC',u'CCETP',u'136'],
-    'Comité de surveillance des activités de renseignement de sécurité'                                                                                              : [u'Security Intelligence Review Committee',u'SIRC',u'Comité de surveillance des activités de renseignement de sécurité',u'CSARS',u'109'],
-    'Commissariat au lobbying du Canada'                                                                                                                             : [u'Office of the Commissioner of Lobbying of Canada',u'OCL',u'Commissariat au lobbying du Canada',u'CAL',u'205'],
-    'Commissariat aux langues officielles'                                                                                                                           : [u'Office of the Commissioner of Official Languages',u'OCOL',u'Commissariat aux langues officielles',u'CLO',u'258'],
-    'Commissariat à la magistrature fédérale Canada'                                                                                                                 : [u'Office of the Commissioner for Federal Judicial Affairs Canada',u'FJA',u'Commissariat à la magistrature fédérale Canada',u'CMF',u'140'],
-    'Commissariats à l’information et à la protection de la vie privée au Canada'                                                                                    : [u'Offices of the Information and Privacy Commissioners of Canada',u'OIC',u'Commissariats à l’information et à la protection de la vie privée au Canada',u'CI',u'41'],
-    'Commissariats à l’information et à la protection de la vie privée au Canada'                                                                                    : [u'Offices of the Information and Privacy Commissioners of Canada',u'OPC',u'Commissariats à l’information et à la protection de la vie privée au Canada',u'CPVP',u'226'],
-    'Commission canadienne de sûreté nucléaire'                                                                                                                      : [u'Canadian Nuclear Safety Commission',u'CNSC',u'Commission canadienne de sûreté nucléaire',u'CCSN',u'58'],
-    'Commission canadienne des affaires polaires'                                                                                                                    : [u'Canadian Polar Commission',u'POLAR',u'Commission canadienne des affaires polaires',u'POLAIRE',u'143'],
-    'Commission canadienne des droits de la personne'                                                                                                                : [u'Canadian Human Rights Commission',u'CHRC',u'Commission canadienne des droits de la personne',u'CCDP',u'113'],
-    'Commission canadienne des grains'                                                                                                                               : [u'Canadian Grain Commission',u'CGC',u'Commission canadienne des grains',u'CCG',u'169'],
-    'Commission canadienne du lait'                                                                                                                                  : [u'Canadian Dairy Commission',u'CDC',u'Commission canadienne du lait',u'CCL',u'151'],
-    'Commission civile d’examen et de traitement des plaintes relatives à la GRC'                                                                                    : [u'Civilian Review and Complaints Commission for the RCMP',u'CRCC',u'Commission civile d’examen et de traitement des plaintes relatives à la GRC',u'CCETP',u'136'],
-    'Commission de la capitale nationale'                                                                                                                            : [u'National Capital Commission',u'NCC',u'Commission de la capitale nationale',u'CCN',u'22'],
-    'Commission de la fonction publique du Canada'                                                                                                                   : [u'Public Service Commission of Canada',u'PSC',u'Commission de la fonction publique du Canada',u'CFP',u'227'],
-    'Commission de vérité et de réconciliation relative aux pensionnats indiens'                                                                                     : [u'Indian Residential Schools Truth and Reconciliation Commission',u'',u'Commission de vérité et de réconciliation relative aux pensionnats indiens',u'',u'245'],
-    'Commission des champs de bataille nationaux'                                                                                                                    : [u'The National Battlefields Commission',u'NBC',u'Commission des champs de bataille nationaux',u'CCBN',u'262'],
-    'Commission des libérations conditionnelles du Canada'                                                                                                           : [u'Parole Board of Canada',u'PBC',u'Commission des libérations conditionnelles du Canada',u'CLCC',u'246'],
-    'Commission des relations de travail dans la fonction publique'                                                                                                  : [u'Public Service Labour Relations Board',u'PSLRB',u'Commission des relations de travail dans la fonction publique',u'CRTFP',u'102'],
-    'Commission du droit du Canada'                                                                                                                                  : [u'Law Commission of Canada',u'',u'Commission du droit du Canada',u'',u'231'],
-    'Communications Security Establishment Canada'                                                                                                                   : [u'Communications Security Establishment Canada',u'CSEC',u'Centre de la sécurité des télécommunications Canada',u'CSTC',u'156'],
-    'Condition féminine Canada'                                                                                                                                      : [u'Status of Women Canada',u'SWC',u'Condition féminine Canada',u'CFC',u'147'],
-    'Conseil canadien des normes'                                                                                                                                    : [u'Standards Council of Canada',u'SCC-CCN',u'Conseil canadien des normes',u'SCC-CCN',u'107'],
-    'Conseil canadien des relations industrielles'                                                                                                                   : [u'Canada Industrial Relations Board',u'CIRB',u'Conseil canadien des relations industrielles',u'CCRI',u'188'],
-    'Conseil de la radiodiffusion et des télécommunications canadiennes'                                                                                             : [u'Canadian Radio-television and Telecommunications Commission',u'CRTC',u'Conseil de la radiodiffusion et des télécommunications canadiennes',u'CRTC',u'126'],
-    'Conseil de recherches en sciences humaines du Canada'                                                                                                           : [u'Social Sciences and Humanities Research Council of Canada',u'SSHRC',u'Conseil de recherches en sciences humaines du Canada',u'CRSH',u'207'],
-    'Conseil des produits agricoles du Canada'                                                                                                                       : [u'Farm Products Council of Canada',u'FPCC',u'Conseil des produits agricoles du Canada',u'CPAC',u'200'],
-    'Conseil du Trésor'                                                                                                                                              : [u'Treasury Board',u'TB',u'Conseil du Trésor',u'CT',u'105'],
-    'Conseil national de recherches Canada'                                                                                                                          : [u'National Research Council Canada',u'NRC',u'Conseil national de recherches Canada',u'CNRC',u'172'],
-    'Construction de Défense Canada'                                                                                                                                 : [u'Defence Construction Canada',u'DCC',u'Construction de Défense Canada',u'CDC',u'28'],
-    'Copyright Board Canada'                                                                                                                                         : [u'Copyright Board Canada',u'CB',u'Commission du droit d\'auteur Canada',u'CDA',u'116'],
-    'Corporation commerciale canadienne'                                                                                                                             : [u'Canadian Commercial Corporation',u'CCC',u'Corporation commerciale canadienne',u'CCC',u'34'],
-    'Corporation de développement des investissements du Canada'                                                                                                     : [u'Canada Development Investment Corporation',u'CDEV',u'Corporation de développement des investissements du Canada',u'CDEV',u'148'],
-    'Correctional Service of Canada'                                                                                                                                 : [u'Correctional Service of Canada',u'CSC',u'Service correctionnel du Canada',u'SCC',u'193'],
-    'Courts Administration Service'                                                                                                                                  : [u'Courts Administration Service',u'CAS',u'Service administratif des tribunaux judiciaires',u'SATJ',u'228'],
-    'Defence Construction Canada'                                                                                                                                    : [u'Defence Construction Canada',u'DCC',u'Construction de Défense Canada',u'CDC',u'28'],
-    'Department of Finance Canada'                                                                                                                                   : [u'Department of Finance Canada',u'FIN',u'Ministère des Finances Canada',u'FIN',u'157'],
-    'Department of Justice Canada'                                                                                                                                   : [u'Department of Justice Canada',u'JUS',u'Ministère de la Justice Canada',u'JUS',u'119'],
-    'Destination Canada'                                                                                                                                             : [u'Destination Canada',u'  DC',u'Destination Canada',u'  DC',u'178'],
-    'Destination Canada'                                                                                                                                             : [u'Destination Canada',u'  DC',u'Destination Canada',u'  DC',u'178'],
-    'Défense nationale'                                                                                                                                              : [u'National Defence',u'DND',u'Défense nationale',u'MDN',u'32'],
-    'Economic Development Agency of Canada for the Regions of Quebec'                                                                                                : [u'Economic Development Agency of Canada for the Regions of Quebec',u'CED',u'Agence de développement économique du Canada pour les régions du Québec',u'DEC',u'93'],
-    'Elections Canada'                                                                                                                                               : [u'Elections Canada',u'elections',u'Élections Canada',u'elections',u'285'],
-    'Emploi et Développement social Canada'                                                                                                                          : [u'Employment and Social Development Canada',u'esdc',u'Emploi et Développement social Canada',u'edsc',u'141'],
-    'Employment and Social Development Canada'                                                                                                                       : [u'Employment and Social Development Canada',u'esdc',u'Emploi et Développement social Canada',u'edsc',u'141'],
-    'Enterprise Cape Breton Corporation'                                                                                                                             : [u'Enterprise Cape Breton Corporation',u'',u'Société d\'expansion du Cap-Breton',u'',u'203'],
-    'Export Development Canada'                                                                                                                                      : [u'Export Development Canada',u'EDC',u'Exportation et développement Canada',u'EDC',u'62'],
-    'Exportation et développement Canada'                                                                                                                            : [u'Export Development Canada',u'EDC',u'Exportation et développement Canada',u'EDC',u'62'],
-    'Farm Credit Canada'                                                                                                                                             : [u'Farm Credit Canada',u'FCC',u'Financement agricole Canada',u'FAC',u'23'],
-    'Farm Products Council of Canada'                                                                                                                                : [u'Farm Products Council of Canada',u'FPCC',u'Conseil des produits agricoles du Canada',u'CPAC',u'200'],
-    'Federal Bridge Corporation'                                                                                                                                     : [u'Federal Bridge Corporation',u'FBCL',u'Société des ponts fédéraux',u'SPFL',u'254'],
-    'Federal Economic Development Agency for Southern Ontario'                                                                                                       : [u'Federal Economic Development Agency for Southern Ontario',u'FedDev Ontario',u'Agence fédérale de développement économique pour le Sud de l\'Ontario',u'FedDev Ontario',u'21'],
-    'Financement agricole Canada'                                                                                                                                    : [u'Farm Credit Canada',u'FCC',u'Financement agricole Canada',u'FAC',u'23'],
-    'Financial Consumer Agency of Canada'                                                                                                                            : [u'Financial Consumer Agency of Canada',u'FCAC',u'Agence de la consommation en matière financière du Canada',u'ACFC',u'224'],
-    'Financial Transactions and Reports Analysis Centre of Canada'                                                                                                   : [u'Financial Transactions and Reports Analysis Centre of Canada',u'FINTRAC',u'Centre d\'analyse des opérations et déclarations financières du Canada',u'CANAFE',u'127'],
-    'Fisheries and Oceans Canada'                                                                                                                                    : [u'Fisheries and Oceans Canada',u'DFO',u'Pêches et Océans Canada',u'MPO',u'253'],
-    'Freshwater Fish Marketing Corporation'                                                                                                                          : [u'Freshwater Fish Marketing Corporation',u'FFMC',u'Office de commercialisation du poisson d\'eau douce',u'OCPED',u'252'],
-    'Gendarmerie royale du Canada'                                                                                                                                   : [u'Royal Canadian Mounted Police',u'RCMP',u'Gendarmerie royale du Canada',u'GRC',u'131'],
-    'Great Lakes Pilotage Authority Canada'                                                                                                                          : [u'Great Lakes Pilotage Authority Canada',u'GLPA',u'Administration de pilotage des Grands Lacs Canada',u'APGL',u'261'],
-    'Greffe du Tribunal de la concurrence'                                                                                                                           : [u'Registry of the Competition Tribunal',u'RCT',u'Greffe du Tribunal de la concurrence',u'GTC',u'89'],
-    'Greffe du Tribunal des revendications particulières du Canada'                                                                                                  : [u'Registry of the Specific Claims Tribunal of Canada',u'SCT',u'Greffe du Tribunal des revendications particulières du Canada',u'TRP',u'220'],
-    'Health Canada'                                                                                                                                                  : [u'Health Canada',u'HC',u'Santé Canada',u'SC',u'271'],
-    'Human Rights Tribunal of Canada'                                                                                                                                : [u'Human Rights Tribunal of Canada',u'HRTC',u'Tribunal des droits de la personne du Canada',u'TDPC',u'164'],
-    'Immigration and Refugee Board of Canada'                                                                                                                        : [u'Immigration and Refugee Board of Canada',u'IRB',u'Commission de l\'immigration et du statut de réfugié du Canada',u'CISR',u'5'],
-    'Indian Residential Schools Truth and Reconciliation Commission'                                                                                                 : [u'Indian Residential Schools Truth and Reconciliation Commission',u'',u'Commission de vérité et de réconciliation relative aux pensionnats indiens',u'',u'245'],
-    'Infrastructure Canada'                                                                                                                                          : [u'Infrastructure Canada',u'INFC',u'Infrastructure Canada',u'INFC',u'278'],
-    'Infrastructure Canada'                                                                                                                                          : [u'Infrastructure Canada',u'INFC',u'Infrastructure Canada',u'INFC',u'278'],
-    'Instituts de recherche en santé du Canada'                                                                                                                      : [u'Canadian Institutes of Health Research',u'CIHR',u'Instituts de recherche en santé du Canada',u'IRSC',u'236'],
-    'Jacques Cartier and Champlain Bridges Incorporated'                                                                                                             : [u'Jacques Cartier and Champlain Bridges Incorporated',u'JCCBI',u'Les Ponts Jacques-Cartier et Champlain Incorporée',u'PJCCI',u'55559'],
-    'Laurentian Pilotage Authority Canada'                                                                                                                           : [u'Laurentian Pilotage Authority Canada',u'LPA',u'Administration de pilotage des Laurentides Canada',u'APL',u'213'],
-    'Law Commission of Canada'                                                                                                                                       : [u'Law Commission of Canada',u'',u'Commission du droit du Canada',u'',u'231'],
-    'Les Ponts Jacques-Cartier et Champlain Incorporée'                                                                                                              : [u'Jacques Cartier and Champlain Bridges Incorporated',u'JCCBI',u'Les Ponts Jacques-Cartier et Champlain Incorporée',u'PJCCI',u'55559'],
-    'Library and Archives Canada'                                                                                                                                    : [u'Library and Archives Canada',u'LAC',u'Bibliothèque et Archives Canada',u'BAC',u'129'],
-    'Library of Parliament'                                                                                                                                          : [u'Library of Parliament',u'LP',u'Bibliothèque du Parlement',u'BP',u'55555'],
-    'Marine Atlantic Inc.'                                                                                                                                           : [u'Marine Atlantic Inc.',u'',u'Marine Atlantique S.C.C.',u'',u'238'],
-    'Marine Atlantique S.C.C.'                                                                                                                                       : [u'Marine Atlantic Inc.',u'',u'Marine Atlantique S.C.C.',u'',u'238'],
-    'Military Grievances External Review Committee'                                                                                                                  : [u'Military Grievances External Review Committee',u'MGERC',u'Comité externe d\'examen des griefs militaires',u'CEEGM',u'43'],
-    'Military Police Complaints Commission of Canada'                                                                                                                : [u'Military Police Complaints Commission of Canada',u'MPCC',u'Commission d\'examen des plaintes concernant la police militaire du Canada',u'CPPM',u'66'],
-    'Ministère de la Justice Canada'                                                                                                                                 : [u'Department of Justice Canada',u'JUS',u'Ministère de la Justice Canada',u'JUS',u'119'],
-    'Ministère des Finances Canada'                                                                                                                                  : [u'Department of Finance Canada',u'FIN',u'Ministère des Finances Canada',u'FIN',u'157'],
-    'Monnaie royale canadienne'                                                                                                                                      : [u'Royal Canadian Mint',u'',u'Monnaie royale canadienne',u'',u'18'],
-    'Musée canadien de la nature'                                                                                                                                    : [u'Canadian Museum of Nature',u'CMN',u'Musée canadien de la nature',u'MCN',u'57'],
-    'Musée canadien pour les droits de la personne'                                                                                                                  : [u'Canadian Museum for Human Rights',u'CMHR',u'Musée canadien pour les droits de la personne',u'MCDP',u'267'],
-    'Musée des beaux-arts du Canada'                                                                                                                                 : [u'National Gallery of Canada',u'NGC',u'Musée des beaux-arts du Canada',u'MBAC',u'59'],
-    'Musée des sciences et de la technologie du Canada'                                                                                                              : [u'Canada Science and Technology Museum',u'CSTM',u'Musée des sciences et de la technologie du Canada',u'MSTC',u'202'],
-    'National Capital Commission'                                                                                                                                    : [u'National Capital Commission',u'NCC',u'Commission de la capitale nationale',u'CCN',u'22'],
-    'National Defence'                                                                                                                                               : [u'National Defence',u'DND',u'Défense nationale',u'MDN',u'32'],
-    'National Energy Board'                                                                                                                                          : [u'National Energy Board',u'NEB',u'Office national de l\'énergie',u'ONE',u'239'],
-    'National Film Board'                                                                                                                                            : [u'National Film Board',u'NFB',u'Office national du film',u'ONF',u'167'],
-    'National Gallery of Canada'                                                                                                                                     : [u'National Gallery of Canada',u'NGC',u'Musée des beaux-arts du Canada',u'MBAC',u'59'],
-    'National Research Council Canada'                                                                                                                               : [u'National Research Council Canada',u'NRC',u'Conseil national de recherches Canada',u'CNRC',u'172'],
-    'Natural Resources Canada'                                                                                                                                       : [u'Natural Resources Canada',u'NRCan',u'Ressources naturelles Canada',u'RNCan',u'115'],
-    'Northern Pipeline Agency Canada'                                                                                                                                : [u'Northern Pipeline Agency Canada',u'NPA',u'Administration du pipe-line du Nord Canada',u'APN',u'10'],
-    'Office des transports du Canada'                                                                                                                                : [u'Canadian Transportation Agency',u'CTA',u'Office des transports du Canada',u'OTC',u'124'],
-    'Office national du film'                                                                                                                                        : [u'National Film Board',u'NFB',u'Office national du film',u'ONF',u'167'],
-    'Office of the Auditor General of Canada'                                                                                                                        : [u'Office of the Auditor General of Canada',u'OAG',u'Bureau du vérificateur général du Canada',u'BVG',u'125'],
-    'Office of the Chief Electoral Officer'                                                                                                                          : [u'Office of the Chief Electoral Officer',u'elections',u'Bureau du directeur général des élections',u'elections',u'---'],
-    'Bureau du directeur général des élections'                                                                                                                      : [u'Office of the Chief Electoral Officer',u'elections',u'Bureau du directeur général des élections',u'elections',u'---'],
-    'Office of the Commissioner for Federal Judicial Affairs Canada'                                                                                                 : [u'Office of the Commissioner for Federal Judicial Affairs Canada',u'FJA',u'Commissariat à la magistrature fédérale Canada',u'CMF',u'140'],
-    'Office of the Commissioner of Lobbying of Canada'                                                                                                               : [u'Office of the Commissioner of Lobbying of Canada',u'OCL',u'Commissariat au lobbying du Canada',u'CAL',u'205'],
-    'Office of the Commissioner of Official Languages'                                                                                                               : [u'Office of the Commissioner of Official Languages',u'OCOL',u'Commissariat aux langues officielles',u'CLO',u'258'],
-    'Office of the Communications Security Establishment Commissioner'                                                                                               : [u'Office of the Communications Security Establishment Commissioner',u'OCSEC',u'Bureau du commissaire du Centre de la sécurité des télécommunications',u'BCCST',u'279'],
-    'Office of the Public Sector Integrity Commissioner of Canada'                                                                                                   : [u'Office of the Public Sector Integrity Commissioner of Canada',u'PSIC',u'Commissariat à l\'intégrité du secteur public du Canada',u'ISPC',u'210'],
-    'Office of the Secretary to the Governor General'                                                                                                                : [u'Office of the Secretary to the Governor General',u'OSGG',u'Bureau du secrétaire du gouverneur général',u'BSGG',u'5557'],
-    'Office of the Superintendent of Financial Institutions Canada'                                                                                                  : [u'Office of the Superintendent of Financial Institutions Canada',u'OSFI',u'Bureau du surintendant des institutions financières Canada',u'BSIF',u'184'],
-    'Offices of the Information and Privacy Commissioners of Canada'                                                                                                 : [u'Offices of the Information and Privacy Commissioners of Canada',u'OIC',u'Commissariats à l’information et à la protection de la vie privée au Canada',u'CI',u'41'],
-    'Offices of the Information and Privacy Commissioners of Canada'                                                                                                 : [u'Offices of the Information and Privacy Commissioners of Canada',u'OPC',u'Commissariats à l’information et à la protection de la vie privée au Canada',u'CPVP',u'226'],
-    'Pacific Pilotage Authority Canada'                                                                                                                              : [u'Pacific Pilotage Authority Canada',u'PPA',u'Administration de pilotage du Pacifique Canada',u'APP',u'165'],
-    'Parcs Canada'                                                                                                                                                   : [u'Parks Canada',u'PC',u'Parcs Canada',u'PC',u'154'],
-    'Parks Canada'                                                                                                                                                   : [u'Parks Canada',u'PC',u'Parcs Canada',u'PC',u'154'],
-    'Parole Board of Canada'                                                                                                                                         : [u'Parole Board of Canada',u'PBC',u'Commission des libérations conditionnelles du Canada',u'CLCC',u'246'],
-    'Patented Medicine Prices Review Board Canada'                                                                                                                   : [u'Patented Medicine Prices Review Board Canada',u'',u'Conseil d\'examen du prix des médicaments brevetés Canada',u'',u'15'],
-    'Patrimoine canadien'                                                                                                                                            : [u'Canadian Heritage',u'PCH',u'Patrimoine canadien',u'PCH',u'16'],
-    'Postes Canada'                                                                                                                                                  : [u'Canada Post',u'CPC',u'Postes Canada',u'SCP',u'83'],
-    'Privy Council Office'                                                                                                                                           : [u'Privy Council Office',u'',u'Bureau du Conseil privé',u'',u'173'],
-    'Public Health Agency of Canada'                                                                                                                                 : [u'Public Health Agency of Canada',u'PHAC',u'Agence de la santé publique du Canada',u'ASPC',u'135'],
-    'Public Prosecution Service of Canada'                                                                                                                           : [u'Public Prosecution Service of Canada',u'PPSC',u'Service des poursuites pénales du Canada',u'SPPC',u'98'],
-    'Public Safety Canada'                                                                                                                                           : [u'Public Safety Canada',u'PS',u'Sécurité publique Canada',u'SP',u'214'],
-    'Public Servants Disclosure Protection Tribunal Canada'                                                                                                          : [u'Public Servants Disclosure Protection Tribunal Canada',u'PSDPTC',u'Tribunal de la protection des fonctionnaires divulgateurs Canada',u'TPFDC',u'40'],
-    'Public Service Commission of Canada'                                                                                                                            : [u'Public Service Commission of Canada',u'PSC',u'Commission de la fonction publique du Canada',u'CFP',u'227'],
-    'Public Service Labour Relations Board'                                                                                                                          : [u'Public Service Labour Relations Board',u'PSLRB',u'Commission des relations de travail dans la fonction publique',u'CRTFP',u'102'],
-    'Public Service Staffing Tribunal'                                                                                                                               : [u'Public Service Staffing Tribunal',u'PSST',u'Tribunal de la dotation de la fonction publique',u'TDFP',u'266'],
-    'Pêches et Océans Canada'                                                                                                                                        : [u'Fisheries and Oceans Canada',u'DFO',u'Pêches et Océans Canada',u'MPO',u'253'],
-    'RCMP External Review Committee'                                                                                                                                 : [u'RCMP External Review Committee',u'ERC',u'Comité externe d\'examen de la GRC',u'CEE',u'232'],
-    'Recherches en sciences et en génie Canada'                                                                                                                      : [u'Science and Engineering Research Canada',u'SERC',u'Recherches en sciences et en génie Canada',u'RSGC',u'110'],
-    'Registrar of the Supreme Court of Canada and that portion of the federal public administration appointed under subsection 12(2) of the Supreme Court Act'       : [u'Registrar of the Supreme Court of Canada and that portion of the federal public administration appointed under subsection 12(2) of the Supreme Court Act',u'SCC',u'Registraire de la Cour suprême du Canada et le secteur de l\'administration publique fédérale nommé en vertu du paragraphe 12(2) de la Loi sur la Cour suprême',u'CSC',u'63'],
-    'Registry of the Competition Tribunal'                                                                                                                           : [u'Registry of the Competition Tribunal',u'RCT',u'Greffe du Tribunal de la concurrence',u'GTC',u'89'],
-    'Registry of the Specific Claims Tribunal of Canada'                                                                                                             : [u'Registry of the Specific Claims Tribunal of Canada',u'SCT',u'Greffe du Tribunal des revendications particulières du Canada',u'TRP',u'220'],
-    'Ressources naturelles Canada'                                                                                                                                   : [u'Natural Resources Canada',u'NRCan',u'Ressources naturelles Canada',u'RNCan',u'115'],
-    'Ridley Terminals Inc.'                                                                                                                                          : [u'Ridley Terminals Inc.',u'',u'Ridley Terminals Inc.',u'',u'142'],
-    'Ridley Terminals Inc.'                                                                                                                                          : [u'Ridley Terminals Inc.',u'',u'Ridley Terminals Inc.',u'',u'142'],
-    'Royal Canadian Mint'                                                                                                                                            : [u'Royal Canadian Mint',u'',u'Monnaie royale canadienne',u'',u'18'],
-    'Royal Canadian Mounted Police'                                                                                                                                  : [u'Royal Canadian Mounted Police',u'RCMP',u'Gendarmerie royale du Canada',u'GRC',u'131'],
-    'Santé Canada'                                                                                                                                                   : [u'Health Canada',u'HC',u'Santé Canada',u'SC',u'271'],
-    'Science and Engineering Research Canada'                                                                                                                        : [u'Science and Engineering Research Canada',u'SERC',u'Recherches en sciences et en génie Canada',u'RSGC',u'110'],
-    'Secrétariat des conférences intergouvernementales canadiennes'                                                                                                  : [u'Canadian Intergovernmental Conference Secretariat',u'CICS',u'Secrétariat des conférences intergouvernementales canadiennes',u'SCIC',u'274'],
-    'Secrétariat du Conseil du Trésor du Canada'                                                                                                                     : [u'Treasury Board of Canada Secretariat',u'TBS',u'Secrétariat du Conseil du Trésor du Canada',u'SCT',u'139'],
-    'Security Intelligence Review Committee'                                                                                                                         : [u'Security Intelligence Review Committee',u'SIRC',u'Comité de surveillance des activités de renseignement de sécurité',u'CSARS',u'109'],
-    'Service administratif des tribunaux judiciaires'                                                                                                                : [u'Courts Administration Service',u'CAS',u'Service administratif des tribunaux judiciaires',u'SATJ',u'228'],
-    'Service canadien du renseignement de sécurité'                                                                                                                  : [u'Canadian Security Intelligence Service',u'CSIS',u'Service canadien du renseignement de sécurité',u'SCRS',u'90'],
-    'Service correctionnel du Canada'                                                                                                                                : [u'Correctional Service of Canada',u'CSC',u'Service correctionnel du Canada',u'SCC',u'193'],
-    'Service des poursuites pénales du Canada'                                                                                                                       : [u'Public Prosecution Service of Canada',u'PPSC',u'Service des poursuites pénales du Canada',u'SPPC',u'98'],
-    'Services partagés Canada'                                                                                                                                       : [u'Shared Services Canada',u'SSC',u'Services partagés Canada',u'SPC',u'92'],
-    'Shared Services Canada'                                                                                                                                         : [u'Shared Services Canada',u'SSC',u'Services partagés Canada',u'SPC',u'92'],
-    'Social Sciences and Humanities Research Council of Canada'                                                                                                      : [u'Social Sciences and Humanities Research Council of Canada',u'SSHRC',u'Conseil de recherches en sciences humaines du Canada',u'CRSH',u'207'],
-    'Société des ponts fédéraux'                                                                                                                                     : [u'Federal Bridge Corporation',u'FBCL',u'Société des ponts fédéraux',u'SPFL',u'254'],
-    'Société immobilière du Canada Limitée'                                                                                                                          : [u'Canada Lands Company Limited',u'',u'Société immobilière du Canada Limitée',u'',u'82'],
-    'Standards Council of Canada'                                                                                                                                    : [u'Standards Council of Canada',u'SCC-CCN',u'Conseil canadien des normes',u'SCC-CCN',u'107'],
-    'Statistics Canada'                                                                                                                                              : [u'Statistics Canada',u'StatCan',u'Statistique Canada',u'StatCan',u'256'],
-    'Statistique Canada'                                                                                                                                             : [u'Statistics Canada',u'StatCan',u'Statistique Canada',u'StatCan',u'256'],
-    'Status of Women Canada'                                                                                                                                         : [u'Status of Women Canada',u'SWC',u'Condition féminine Canada',u'CFC',u'147'],
-    'Sécurité publique Canada'                                                                                                                                       : [u'Public Safety Canada',u'PS',u'Sécurité publique Canada',u'SP',u'214'],
-    'The Correctional Investigator Canada'                                                                                                                           : [u'The Correctional Investigator Canada',u'OCI',u'L\'Enquêteur correctionnel Canada',u'BEC',u'5555'],
-    'The National Battlefields Commission'                                                                                                                           : [u'The National Battlefields Commission',u'NBC',u'Commission des champs de bataille nationaux',u'CCBN',u'262'],
-    'Transport Canada'                                                                                                                                               : [u'Transport Canada',u'TC',u'Transports Canada',u'TC',u'217'],
-    'Transportation Appeal Tribunal of Canada'                                                                                                                       : [u'Transportation Appeal Tribunal of Canada',u'TATC',u'Tribunal d\'appel des transports du Canada',u'TATC',u'96'],
-    'Transportation Safety Board of Canada'                                                                                                                          : [u'Transportation Safety Board of Canada',u'TSB',u'Bureau de la sécurité des transports du Canada',u'BST',u'215'],
-    'Transports Canada'                                                                                                                                              : [u'Transport Canada',u'TC',u'Transports Canada',u'TC',u'217'],
-    'Treasury Board of Canada Secretariat'                                                                                                                           : [u'Treasury Board of Canada Secretariat',u'TBS',u'Secrétariat du Conseil du Trésor du Canada',u'SCT',u'139'],
-    'Treasury Board'                                                                                                                                                 : [u'Treasury Board',u'TB',u'Conseil du Trésor',u'CT',u'105'],
-    'Tribunal canadien du commerce extérieur'                                                                                                                        : [u'Canadian International Trade Tribunal',u'CITT',u'Tribunal canadien du commerce extérieur',u'TCCE',u'175'],
-    'Tribunal de la dotation de la fonction publique'                                                                                                                : [u'Public Service Staffing Tribunal',u'PSST',u'Tribunal de la dotation de la fonction publique',u'TDFP',u'266'],
-    'Tribunal de la protection des fonctionnaires divulgateurs Canada'                                                                                               : [u'Public Servants Disclosure Protection Tribunal Canada',u'PSDPTC',u'Tribunal de la protection des fonctionnaires divulgateurs Canada',u'TPFDC',u'40'],
-    'Tribunal des anciens combattants (révision et appel)'                                                                                                           : [u'Veterans Review and Appeal Board',u'VRAB',u'Tribunal des anciens combattants (révision et appel)',u'TACRA',u'85'],
-    'Tribunal des droits de la personne du Canada'                                                                                                                   : [u'Human Rights Tribunal of Canada',u'HRTC',u'Tribunal des droits de la personne du Canada',u'TDPC',u'164'],
-    'Veterans Affairs Canada'                                                                                                                                        : [u'Veterans Affairs Canada',u'VAC',u'Anciens Combattants Canada',u'ACC',u'189'],
-    'Veterans Review and Appeal Board'                                                                                                                               : [u'Veterans Review and Appeal Board',u'VRAB',u'Tribunal des anciens combattants (révision et appel)',u'TACRA',u'85'],
-    'VIA Rail Canada Inc.'                                                                                                                                           : [u'VIA Rail Canada Inc.',u'',u'VIA Rail Canada Inc.',u'',u'55555'],
-    'VIA Rail Canada Inc.'                                                                                                                                           : [u'VIA Rail Canada Inc.',u'',u'VIA Rail Canada Inc.',u'',u'55555'],
-    'Western Economic Diversification Canada'                                                                                                                        : [u'Western Economic Diversification Canada',u'WD',u'Diversification de l\'économie de l\'Ouest Canada',u'DEO',u'55'],
-    'Windsor-Detroit Bridge Authority'                                                                                                                               : [u'Windsor-Detroit Bridge Authority',u'',u'Autorité du pont Windsor-Détroit',u'',u'55553'],
-    'École de la fonction publique du Canada'                                                                                                                        : [u'Canada School of Public Service',u'CSPS',u'École de la fonction publique du Canada',u'EFPC',u'73'],
-    'Élections Canada'                                                                                                                                               : [u'Elections Canada',u'elections',u'Élections Canada',u'elections',u'285'],
-    'Blue Water Bridge Canada'                                                                                                                                       : [u'Blue Water Bridge Canada',u'bwbc',u'Pont Bleu Water',u'pbwc',u'333'],
+    'Government of Canada; Canadian Intergovernmental Conference Secretariat': [u'Canadian Intergovernmental Conference Secretariat', u'CICS', u'Secr\xe9tariat des conf\xe9rences intergouvernementales canadiennes', u'SCIC', u'274'],
+    'Government of Canada; Tribunal d\'appel des transports du Canada': [u'Transportation Appeal Tribunal of Canada', u'TATC', u"Tribunal d'appel des transports du Canada", u'TATC', u'96'],
+    'Government of Canada; Travaux publics et Services gouvernementaux Canada': [u'Public Works and Government Services Canada', u'PWGSC', u'Travaux publics et Services gouvernementaux Canada', u'TPSGC', u'81'],
+    'Government of Canada; Commission des champs de bataille nationaux': [u'The National Battlefields Commission', u'NBC', u'Commission des champs de bataille nationaux', u'CCBN', u'262'],
+    'Government of Canada; Copyright Board Canada': [u'Copyright Board Canada', u'CB', u"Commission du droit d'auteur Canada", u'CDA', u'116'],
+    'Government of Canada; Office of the Commissioner of Lobbying of Canada': [u'Office of the Commissioner of Lobbying of Canada', u'OCL', u'Commissariat au lobbying du Canada', u'CAL', u'205'],
+    'Government of Canada; S\xc3\xa9curit\xc3\xa9 publique Canada': [u'Public Safety Canada', u'PS', u'S\xe9curit\xe9 publique Canada', u'SP', u'214'],
+    'Government of Canada; L\'Enqu\xc3\xaateur correctionnel Canada': [u'The Correctional Investigator Canada', u'OCI', u"L'Enqu\xeateur correctionnel Canada", u'BEC', u'5555'],
+    'Government of Canada; Secr\xc3\xa9tariat du Conseil du Tr\xc3\xa9sor du Canada': [u'Treasury Board of Canada Secretariat', u'TBS', u'Secr\xe9tariat du Conseil du Tr\xe9sor du Canada', u'SCT', u'139'],
+    'Government of Canada; Canada Development Investment Corporation': [u'Canada Development Investment Corporation', u'CDEV', u'Corporation de d\xe9veloppement des investissements du Canada', u'CDEV', u'148'],
+    'Government of Canada; Immigration, Refugees and Citizenship Canada': [u'Citizenship and Immigration Canada', u'CIC', u'Citoyennet\xe9 et Immigration Canada', u'CIC', u'94'],
+    'Government of Canada; Economic Development Agency of Canada for the Regions of Quebec': [u'Economic Development Agency of Canada for the Regions of Quebec', u'CED', u'Agence de d\xe9veloppement \xe9conomique du Canada pour les r\xe9gions du Qu\xe9bec', u'DEC', u'93'],
+    'Government of Canada; The National Battlefields Commission': [u'The National Battlefields Commission', u'NBC', u'Commission des champs de bataille nationaux', u'CCBN', u'262'],
+    'Government of Canada; Science and Engineering Research Canada': [u'Science and Engineering Research Canada', u'SERC', u'Recherches en sciences et en g\xe9nie Canada', u'RSGC', u'110'],
+    'Government of Canada; Patented Medicine Prices Review Board Canada': [u'Patented Medicine Prices Review Board Canada', u'', u"Conseil d'examen du prix des m\xe9dicaments brevet\xe9s Canada", u'', u'15'],
+    'Government of Canada; Innovation, Science and Economic Development Canada': [u'Industry Canada', u'IC', u'Industrie Canada', u'IC', u'230'],
+    'Government of Canada; Tribunal de la dotation de la fonction publique': [u'Public Service Staffing Tribunal', u'PSST', u'Tribunal de la dotation de la fonction publique', u'TDFP', u'266'],
+    'Government of Canada; \xc3\x89lections Canada': [u'Elections Canada', u'elections', u'\xc9lections Canada', u'elections', u'285'],
+    'Government of Canada; Treasury Board of Canada Secretariat': [u'Treasury Board of Canada Secretariat', u'TBS', u'Secr\xe9tariat du Conseil du Tr\xe9sor du Canada', u'SCT', u'139'],
+    "Government of Canada; Office de commercialisation du poisson d'eau douce": [u'Freshwater Fish Marketing Corporation', u'FFMC', u"Office de commercialisation du poisson d'eau douce", u'OCPED', u'252'],
+    'Government of Canada; Public Service Labour Relations Board': [u'Public Service Labour Relations Board', u'PSLRB', u'Commission des relations de travail dans la fonction publique', u'CRTFP', u'102'],
+    'Government of Canada; Commission du droit du Canada': [u'Law Commission of Canada', u'', u'Commission du droit du Canada', u'', u'231'],
+    'Government of Canada; Infrastructure Canada': [u'Infrastructure Canada', u'INFC', u'Infrastructure Canada', u'INFC', u'278'],
+    'Government of Canada; Conseil des produits agricoles du Canada': [u'Farm Products Council of Canada', u'FPCC', u'Conseil des produits agricoles du Canada', u'CPAC', u'200'],
+    'Government of Canada; Environnement et Changement climatique Canada': [u'Environment Canada', u'EC', u'Environnement Canada', u'EC', u'99'],
+    'Government of Canada; National Energy Board': [u'National Energy Board', u'NEB', u"Office national de l'\xe9nergie", u'ONE', u'239'],
+    'Government of Canada; Office of the Chief Electoral Officer': [u'Office of the Chief Electoral Officer', u'elections', u'Bureau du directeur g\xe9n\xe9ral des \xe9lections', u'elections', u'---'],
+    'Government of Canada; Services partag\xc3\xa9s Canada': [u'Shared Services Canada', u'SSC', u'Services partag\xe9s Canada', u'SPC', u'92'],
+    'Government of Canada; Corporation de d\xc3\xa9veloppement des investissements du Canada': [u'Canada Development Investment Corporation', u'CDEV', u'Corporation de d\xe9veloppement des investissements du Canada', u'CDEV', u'148'],
+    'Government of Canada; National Gallery of Canada': [u'National Gallery of Canada', u'NGC', u'Mus\xe9e des beaux-arts du Canada', u'MBAC', u'59'],
+    'Government of Canada; Conseil national de recherches Canada': [u'National Research Council Canada', u'NRC', u'Conseil national de recherches Canada', u'CNRC', u'172'],
+    'Government of Canada; Canadian Museum of History': [u'Canadian Museum of History', u'CMH', u"Mus\xe9e canadien de l'histoire", u'MCH', u'263'],
+    'Government of Canada; Tribunal canadien du commerce ext\xc3\xa9rieur': [u'Canadian International Trade Tribunal', u'CITT', u'Tribunal canadien du commerce ext\xe9rieur', u'TCCE', u'175'],
+    'Government of Canada; Military Police Complaints Commission of Canada': [u'Military Police Complaints Commission of Canada', u'MPCC', u"Commission d'examen des plaintes concernant la police militaire du Canada", u'CPPM', u'66'],
+    'Government of Canada; Minist\xc3\xa8re des Finances Canada': [u'Department of Finance Canada', u'FIN', u'Minist\xe8re des Finances Canada', u'FIN', u'157'],
+    'Government of Canada; Administration de pilotage des Grands Lacs Canada': [u'Great Lakes Pilotage Authority Canada', u'GLPA', u'Administration de pilotage des Grands Lacs Canada', u'APGL', u'261'],
+    'Government of Canada; Atlantic Canada Opportunities Agency': [u'Atlantic Canada Opportunities Agency', u'ACOA', u'Agence de promotion \xe9conomique du Canada atlantique', u'APECA', u'276'],
+    'Government of Canada; Canadian Centre for Occupational Health and Safety': [u'Canadian Centre for Occupational Health and Safety', u'CCOHS', u"Centre canadien d'hygi\xe8ne et de s\xe9curit\xe9 au travail", u'CCHST', u'35'],
+    'Government of Canada; Canada Mortgage and Housing Corporation': [u'Canada Mortgage and Housing Corporation', u'CMHC', u"Soci\xe9t\xe9 canadienne d'hypoth\xe8ques et de logement", u'SCHL', u'87'],
+    'Government of Canada; Mus\xc3\xa9e des sciences et de la technologie du Canada': [u'Canada Science and Technology Museum', u'CSTM', u'Mus\xe9e des sciences et de la technologie du Canada', u'MSTC', u'202'],
+    'Government of Canada; Services publics et Approvisionnement Canada': [u'Public Works and Government Services Canada', u'PWGSC', u'Travaux publics et Services gouvernementaux Canada', u'TPSGC', u'81'],
+    'Government of Canada; Northern Pipeline Agency Canada': [u'Northern Pipeline Agency Canada', u'NPA', u'Administration du pipe-line du Nord Canada', u'APN', u'10'],
+    'Government of Canada; Canadian Polar Commission': [u'Canadian Polar Commission', u'POLAR', u'Commission canadienne des affaires polaires', u'POLAIRE', u'143'],
+    'Government of Canada; Civilian Review and Complaints Commission for the RCMP': [u'Civilian Review and Complaints Commission for the RCMP', u'CRCC', u'Commission civile d\u2019examen et de traitement des plaintes relatives \xe0 la GRC', u'CCETP', u'136'],
+    'Government of Canada; Western Economic Diversification Canada': [u'Western Economic Diversification Canada', u'WD', u"Diversification de l'\xe9conomie de l'Ouest Canada", u'DEO', u'55'],
+    'Government of Canada; Soci\xc3\xa9t\xc3\xa9 des ponts f\xc3\xa9d\xc3\xa9raux': [u'Federal Bridge Corporation', u'FBCL', u'Soci\xe9t\xe9 des ponts f\xe9d\xe9raux', u'SPFL', u'254'],
+    'Government of Canada; Emploi et D\xc3\xa9veloppement social Canada': [u'Employment and Social Development Canada', u'esdc', u'Emploi et D\xe9veloppement social Canada', u'edsc', u'141'],
+    'Government of Canada; Administration du pipe-line du Nord Canada': [u'Northern Pipeline Agency Canada', u'NPA', u'Administration du pipe-line du Nord Canada', u'APN', u'10'],
+    'Government of Canada; Financial Transactions and Reports Analysis Centre of Canada': [u'Financial Transactions and Reports Analysis Centre of Canada', u'FINTRAC', u"Centre d'analyse des op\xe9rations et d\xe9clarations financi\xe8res du Canada", u'CANAFE', u'127'],
+    "Government of Canada; Commission de l'immigration et du statut de r\xc3\xa9fugi\xc3\xa9 du Canada": [u'Immigration and Refugee Board of Canada', u'IRB', u"Commission de l'immigration et du statut de r\xe9fugi\xe9 du Canada", u'CISR', u'5'],
+    'Government of Canada; Commissariat aux langues officielles': [u'Office of the Commissioner of Official Languages', u'OCOL', u'Commissariat aux langues officielles', u'CLO', u'258'],
+    "Government of Canada; Commission de l'assurance-emploi du Canada": [u'Canada Employment Insurance Commission', u'CEIC', u"Commission de l'assurance-emploi du Canada", u'CAEC', u'196'],
+    'Government of Canada; Commission canadienne de s\xc3\xbbret\xc3\xa9 nucl\xc3\xa9aire': [u'Canadian Nuclear Safety Commission', u'CNSC', u'Commission canadienne de s\xfbret\xe9 nucl\xe9aire', u'CCSN', u'58'],
+    'Government of Canada; Agriculture and Agri-Food Canada': [u'Agriculture and Agri-Food Canada', u'AAFC', u'Agriculture et Agroalimentaire Canada', u'AAC', u'235'],
+    'Government of Canada; Royal Canadian Mounted Police': [u'Royal Canadian Mounted Police', u'RCMP', u'Gendarmerie royale du Canada', u'GRC', u'131'],
+    "Government of Canada; Centre d'analyse des op\xc3\xa9rations et d\xc3\xa9clarations financi\xc3\xa8res du Canada": [u'Financial Transactions and Reports Analysis Centre of Canada', u'FINTRAC', u"Centre d'analyse des op\xe9rations et d\xe9clarations financi\xe8res du Canada", u'CANAFE', u'127'],
+    "Government of Canada; Conseil d'examen du prix des m\xc3\xa9dicaments brevet\xc3\xa9s Canada": [u'Patented Medicine Prices Review Board Canada', u'', u"Conseil d'examen du prix des m\xe9dicaments brevet\xe9s Canada", u'', u'15'],
+    'Government of Canada; Canadian International Trade Tribunal': [u'Canadian International Trade Tribunal', u'CITT', u'Tribunal canadien du commerce ext\xe9rieur', u'TCCE', u'175'],
+    'Government of Canada; Conseil canadien des relations industrielles': [u'Canada Industrial Relations Board', u'CIRB', u'Conseil canadien des relations industrielles', u'CCRI', u'188'],
+    'Government of Canada; Innovation, Sciences et D\xc3\xa9veloppement \xc3\xa9conomique Canada': [u'Industry Canada', u'IC', u'Industrie Canada', u'IC', u'230'],
+    'Government of Canada; Marine Atlantic Inc.': [u'Marine Atlantic Inc.', u'', u'Marine Atlantique S.C.C.', u'', u'238'],
+    'Government of Canada; Laurentian Pilotage Authority Canada': [u'Laurentian Pilotage Authority Canada', u'LPA', u'Administration de pilotage des Laurentides Canada', u'APL', u'213'],
+    'Government of Canada; Freshwater Fish Marketing Corporation': [u'Freshwater Fish Marketing Corporation', u'FFMC', u"Office de commercialisation du poisson d'eau douce", u'OCPED', u'252'],
+    'Government of Canada; Bureau du secr\xc3\xa9taire du gouverneur g\xc3\xa9n\xc3\xa9ral': [u'Office of the Secretary to the Governor General', u'OSGG', u'Bureau du secr\xe9taire du gouverneur g\xe9n\xe9ral', u'BSGG', u'5557'],
+    'Government of Canada; Affaires \xc3\xa9trang\xc3\xa8res et Commerce international Canada': [u'Foreign Affairs and International Trade Canada', u'DFAIT', u'Affaires \xe9trang\xe8res et Commerce international Canada', u'MAECI', u'64'],
+    'Government of Canada; Canada Post': [u'Canada Post', u'CPC', u'Postes Canada', u'SCP', u'83'],
+    'Government of Canada; Affaires mondiales Canada': [u'Foreign Affairs and International Trade Canada', u'DFAIT', u'Affaires \xe9trang\xe8res et Commerce international Canada', u'MAECI', u'64'],
+    'Government of Canada; Soci\xc3\xa9t\xc3\xa9 immobili\xc3\xa8re du Canada Limit\xc3\xa9e': [u'Canada Lands Company Limited', u'', u'Soci\xe9t\xe9 immobili\xe8re du Canada Limit\xe9e', u'', u'82'],
+    'Government of Canada; Bureau du v\xc3\xa9rificateur g\xc3\xa9n\xc3\xa9ral du Canada': [u'Office of the Auditor General of Canada', u'OAG', u'Bureau du v\xe9rificateur g\xe9n\xe9ral du Canada', u'BVG', u'125'],
+    'Government of Canada; Commission canadienne des affaires polaires': [u'Canadian Polar Commission', u'POLAR', u'Commission canadienne des affaires polaires', u'POLAIRE', u'143'],
+    'Government of Canada; Shared Services Canada': [u'Shared Services Canada', u'SSC', u'Services partag\xe9s Canada', u'SPC', u'92'],
+    'Government of Canada; Canada School of Public Service': [u'Canada School of Public Service', u'CSPS', u'\xc9cole de la fonction publique du Canada', u'EFPC', u'73'],
+    'Government of Canada; Canadian Radio-television and Telecommunications Commission': [u'Canadian Radio-television and Telecommunications Commission', u'CRTC', u'Conseil de la radiodiffusion et des t\xe9l\xe9communications canadiennes', u'CRTC', u'126'],
+    'Government of Canada; Federal Bridge Corporation': [u'Federal Bridge Corporation', u'FBCL', u'Soci\xe9t\xe9 des ponts f\xe9d\xe9raux', u'SPFL', u'254'],
+    'Government of Canada; Elections Canada': [u'Elections Canada', u'elections', u'\xc9lections Canada', u'elections', u'285'],
+    'Government of Canada; Commission civile d\xe2\x80\x99examen et de traitement des plaintes relatives \xc3\xa0 la GRC': [u'Civilian Review and Complaints Commission for the RCMP', u'CRCC', u'Commission civile d\u2019examen et de traitement des plaintes relatives \xe0 la GRC', u'CCETP', u'136'],
+    'Government of Canada; Canada Lands Company Limited': [u'Canada Lands Company Limited', u'', u'Soci\xe9t\xe9 immobili\xe8re du Canada Limit\xe9e', u'', u'82'],
+    'Government of Canada; Mus\xc3\xa9e canadien pour les droits de la personne': [u'Canadian Museum for Human Rights', u'CMHR', u'Mus\xe9e canadien pour les droits de la personne', u'MCDP', u'267'],
+    'Government of Canada; Patrimoine canadien': [u'Canadian Heritage', u'PCH', u'Patrimoine canadien', u'PCH', u'16'],
+    'Government of Canada; Correctional Service of Canada': [u'Correctional Service of Canada', u'CSC', u'Service correctionnel du Canada', u'SCC', u'193'],
+    'Government of Canada; Canadian Grain Commission': [u'Canadian Grain Commission', u'CGC', u'Commission canadienne des grains', u'CCG', u'169'],
+    'Government of Canada; National Capital Commission': [u'National Capital Commission', u'NCC', u'Commission de la capitale nationale', u'CCN', u'22'],
+    'Government of Canada; Canada Emission Reduction Incentives Agency': [u'Canada Emission Reduction Incentives Agency', u'', u"Agence canadienne pour l'incitation \xe0 la r\xe9duction des \xe9missions", u'', u'277'],
+    'Government of Canada; Agriculture et Agroalimentaire Canada': [u'Agriculture and Agri-Food Canada', u'AAFC', u'Agriculture et Agroalimentaire Canada', u'AAC', u'235'],
+    "Government of Canada; Office national de l'\xc3\xa9nergie": [u'National Energy Board', u'NEB', u"Office national de l'\xe9nergie", u'ONE', u'239'],
+    'Government of Canada; Agence des services frontaliers du Canada': [u'Canada Border Services Agency', u'CBSA', u'Agence des services frontaliers du Canada', u'ASFC', u'229'],
+    'Government of Canada; Canadian Institutes of Health Research': [u'Canadian Institutes of Health Research', u'CIHR', u'Instituts de recherche en sant\xe9 du Canada', u'IRSC', u'236'],
+    'Government of Canada; Citoyennet\xc3\xa9 et Immigration Canada': [u'Citizenship and Immigration Canada', u'CIC', u'Citoyennet\xe9 et Immigration Canada', u'CIC', u'94'],
+    'Government of Canada; Agence de la sant\xc3\xa9 publique du Canada': [u'Public Health Agency of Canada', u'PHAC', u'Agence de la sant\xe9 publique du Canada', u'ASPC', u'135'],
+    "Government of Canada; Soci\xc3\xa9t\xc3\xa9 d'expansion du Cap-Breton": [u'Enterprise Cape Breton Corporation', u'', u"Soci\xe9t\xe9 d'expansion du Cap-Breton", u'', u'203'],
+    'Government of Canada; Transports Canada': [u'Transport Canada', u'TC', u'Transports Canada', u'TC', u'217'],
+    'Government of Canada; Sant\xc3\xa9 Canada': [u'Health Canada', u'HC', u'Sant\xe9 Canada', u'SC', u'271'],
+    'Government of Canada; Service des poursuites p\xc3\xa9nales du Canada': [u'Public Prosecution Service of Canada', u'PPSC', u'Service des poursuites p\xe9nales du Canada', u'SPPC', u'98'],
+    'Government of Canada; Canadian Nuclear Safety Commission': [u'Canadian Nuclear Safety Commission', u'CNSC', u'Commission canadienne de s\xfbret\xe9 nucl\xe9aire', u'CCSN', u'58'],
+    'Government of Canada; Communications Security Establishment Canada': [u'Communications Security Establishment Canada', u'CSEC', u'Centre de la s\xe9curit\xe9 des t\xe9l\xe9communications Canada', u'CSTC', u'156'],
+    'Government of Canada; Canadian Northern Economic Development Agency': [u'Canadian Northern Economic Development Agency', u'CanNor', u'Agence canadienne de d\xe9veloppement \xe9conomique du Nord', u'CanNor', u'4'],
+    'Government of Canada; Commission canadienne des grains': [u'Canadian Grain Commission', u'CGC', u'Commission canadienne des grains', u'CCG', u'169'],
+    'Government of Canada; Great Lakes Pilotage Authority Canada': [u'Great Lakes Pilotage Authority Canada', u'GLPA', u'Administration de pilotage des Grands Lacs Canada', u'APGL', u'261'],
+    "Government of Canada; Registraire de la Cour supr\xc3\xaame du Canada et le secteur de l'administration publique f\xc3\xa9d\xc3\xa9rale nomm\xc3\xa9 en vertu du paragraphe 12(2) de la Loi sur la Cour supr\xc3\xaame": [u'Registrar of the Supreme Court of Canada and that portion of the federal public administration appointed under subsection 12(2) of the Supreme Court Act', u'SCC', u"Registraire de la Cour supr\xeame du Canada et le secteur de l'administration publique f\xe9d\xe9rale nomm\xe9 en vertu du paragraphe 12(2) de la Loi sur la Cour supr\xeame", u'CSC', u'63'],
+    'Government of Canada; Recherches en sciences et en g\xc3\xa9nie Canada': [u'Science and Engineering Research Canada', u'SERC', u'Recherches en sciences et en g\xe9nie Canada', u'RSGC', u'110'],
+    'Government of Canada; Les Ponts Jacques-Cartier et Champlain Incorpor\xc3\xa9e': [u'Jacques Cartier and Champlain Bridges Incorporated', u'JCCBI', u'Les Ponts Jacques-Cartier et Champlain Incorpor\xe9e', u'PJCCI', u'55559'],
+    'Government of Canada; Registry of the Competition Tribunal': [u'Registry of the Competition Tribunal', u'RCT', u'Greffe du Tribunal de la concurrence', u'GTC', u'89'],
+    "Government of Canada; Comit\xc3\xa9 externe d'examen des griefs militaires": [u'Military Grievances External Review Committee', u'MGERC', u"Comit\xe9 externe d'examen des griefs militaires", u'CEEGM', u'43'],
+    'Government of Canada; Canada Border Services Agency': [u'Canada Border Services Agency', u'CBSA', u'Agence des services frontaliers du Canada', u'ASFC', u'229'],
+    "Government of Canada; Agence canadienne d'\xc3\xa9valuation environnementale": [u'Canadian Environmental Assessment Agency', u'CEAA', u"Agence canadienne d'\xe9valuation environnementale", u'ACEE', u'270'],
+    'Government of Canada; Administration de pilotage du Pacifique Canada': [u'Pacific Pilotage Authority Canada', u'PPA', u'Administration de pilotage du Pacifique Canada', u'APP', u'165'],
+    'Government of Canada; Commission de la capitale nationale': [u'National Capital Commission', u'NCC', u'Commission de la capitale nationale', u'CCN', u'22'],
+    'Government of Canada; Statistique Canada': [u'Statistics Canada', u'StatCan', u'Statistique Canada', u'StatCan', u'256'],
+    'Government of Canada; Canadian Heritage': [u'Canadian Heritage', u'PCH', u'Patrimoine canadien', u'PCH', u'16'],
+    'Government of Canada; Foreign Affairs and International Trade Canada': [u'Foreign Affairs and International Trade Canada', u'DFAIT', u'Affaires \xe9trang\xe8res et Commerce international Canada', u'MAECI', u'64'],
+    'Government of Canada; Industrie Canada': [u'Industry Canada', u'IC', u'Industrie Canada', u'IC', u'230'],
+    'Government of Canada; Minist\xc3\xa8re de la Justice Canada': [u'Department of Justice Canada', u'JUS', u'Minist\xe8re de la Justice Canada', u'JUS', u'119'],
+    'Government of Canada; Commission des lib\xc3\xa9rations conditionnelles du Canada': [u'Parole Board of Canada', u'PBC', u'Commission des lib\xe9rations conditionnelles du Canada', u'CLCC', u'246'],
+    'Government of Canada; Comit\xc3\xa9 de surveillance des activit\xc3\xa9s de renseignement de s\xc3\xa9curit\xc3\xa9': [u'Security Intelligence Review Committee', u'SIRC', u'Comit\xe9 de surveillance des activit\xe9s de renseignement de s\xe9curit\xe9', u'CSARS', u'109'],
+    'Government of Canada; Relations Couronne-Autochtones et Affaires du Nord Canada': [u'Crown-Indigenous Relations and Northern Affairs Canada', u'AANDC', u'Relations Couronne-Autochtones et Affaires du Nord Canada', u'AADNC', u'249'],
+    'Government of Canada; Environment Canada': [u'Environment Canada', u'EC', u'Environnement Canada', u'EC', u'99'],
+    'Government of Canada; Public Safety Canada': [u'Public Safety Canada', u'PS', u'S\xe9curit\xe9 publique Canada', u'SP', u'214'],
+    'Government of Canada; Destination Canada': [u'Destination Canada', u'  DC', u'Destination Canada', u'  DC', u'178'],
+    'Government of Canada; Status of Women Canada': [u'Status of Women Canada', u'SWC', u'Condition f\xe9minine Canada', u'CFC', u'147'],
+    'Government of Canada; Tribunal des anciens combattants (r\xc3\xa9vision et appel)': [u'Veterans Review and Appeal Board', u'VRAB', u'Tribunal des anciens combattants (r\xe9vision et appel)', u'TACRA', u'85'],
+    'Government of Canada; Monnaie royale canadienne': [u'Royal Canadian Mint', u'', u'Monnaie royale canadienne', u'', u'18'],
+    'Government of Canada; Marine Atlantique S.C.C.': [u'Marine Atlantic Inc.', u'', u'Marine Atlantique S.C.C.', u'', u'238'],
+    'Government of Canada; Canada Revenue Agency': [u'Canada Revenue Agency', u'CRA', u'Agence du revenu du Canada', u'ARC', u'47'],
+    'Government of Canada; Business Development Bank of Canada': [u'Business Development Bank of Canada', u'BDC', u'Banque de d\xe9veloppement du Canada', u'BDC', u'150'],
+    'Government of Canada; Office national du film': [u'National Film Board', u'NFB', u'Office national du film', u'ONF', u'167'],
+    'Government of Canada; Tribunal de la protection des fonctionnaires divulgateurs Canada': [u'Public Servants Disclosure Protection Tribunal Canada', u'PSDPTC', u'Tribunal de la protection des fonctionnaires divulgateurs Canada', u'TPFDC', u'40'],
+    'Government of Canada; Social Sciences and Humanities Research Council of Canada': [u'Social Sciences and Humanities Research Council of Canada', u'SSHRC', u'Conseil de recherches en sciences humaines du Canada', u'CRSH', u'207'],
+    'Government of Canada; Banque de d\xc3\xa9veloppement du Canada': [u'Business Development Bank of Canada', u'BDC', u'Banque de d\xe9veloppement du Canada', u'BDC', u'150'],
+    'Government of Canada; Standards Council of Canada': [u'Standards Council of Canada', u'SCC-CCN', u'Conseil canadien des normes', u'SCC-CCN', u'107'],
+    'Government of Canada; Tribunal des droits de la personne du Canada': [u'Human Rights Tribunal of Canada', u'HRTC', u'Tribunal des droits de la personne du Canada', u'TDPC', u'164'],
+    'Government of Canada; National Research Council Canada': [u'National Research Council Canada', u'NRC', u'Conseil national de recherches Canada', u'CNRC', u'172'],
+    'Government of Canada; Royal Canadian Mint': [u'Royal Canadian Mint', u'', u'Monnaie royale canadienne', u'', u'18'],
+    'Government of Canada; Treasury Board': [u'Treasury Board', u'TB', u'Conseil du Tr\xe9sor', u'CT', u'105'],
+    'Government of Canada; Fisheries and Oceans Canada': [u'Fisheries and Oceans Canada', u'DFO', u'P\xeaches et Oc\xe9ans Canada', u'MPO', u'253'],
+    'Government of Canada; Condition f\xc3\xa9minine Canada': [u'Status of Women Canada', u'SWC', u'Condition f\xe9minine Canada', u'CFC', u'147'],
+    'Government of Canada; Autorit\xc3\xa9 du pont Windsor-D\xc3\xa9troit': [u'Windsor-Detroit Bridge Authority', u'', u'Autorit\xe9 du pont Windsor-D\xe9troit', u'', u'55553'],
+    'Government of Canada; Indigenous and Northern Affairs Canada': [u'Aboriginal Affairs and Northern Development Canada', u'AANDC', u'Affaires autochtones et D\xe9veloppement du Nord Canada', u'AADNC', u'249'],
+    'Government of Canada; Law Commission of Canada': [u'Law Commission of Canada', u'', u'Commission du droit du Canada', u'', u'231'],
+    "Government of Canada; Agence canadienne d'inspection des aliments": [u'Canadian Food Inspection Agency', u'CFIA', u"Agence canadienne d'inspection des aliments", u'ACIA', u'206'],
+    'Government of Canada; Canada Employment Insurance Commission': [u'Canada Employment Insurance Commission', u'CEIC', u"Commission de l'assurance-emploi du Canada", u'CAEC', u'196'],
+    'Government of Canada; Department of Justice Canada': [u'Department of Justice Canada', u'JUS', u'Minist\xe8re de la Justice Canada', u'JUS', u'119'],
+    'Government of Canada; Immigration, R\xc3\xa9fugi\xc3\xa9s et Citoyennet\xc3\xa9 Canada': [u'Citizenship and Immigration Canada', u'CIC', u'Citoyennet\xe9 et Immigration Canada', u'CIC', u'94'],
+    'Government of Canada; Agence spatiale canadienne': [u'Canadian Space Agency', u'CSA', u'Agence spatiale canadienne', u'ASC', u'3'],
+    'Government of Canada; Canada Industrial Relations Board': [u'Canada Industrial Relations Board', u'CIRB', u'Conseil canadien des relations industrielles', u'CCRI', u'188'],
+    'Government of Canada; Canadian Air Transport Security Authority': [u'Canadian Air Transport Security Authority', u'CATSA', u'Administration canadienne de la s\xfbret\xe9 du transport a\xe9rien', u'ACSTA', u'250'],
+    'Government of Canada; Public Prosecution Service of Canada': [u'Public Prosecution Service of Canada', u'PPSC', u'Service des poursuites p\xe9nales du Canada', u'SPPC', u'98'],
+    'Government of Canada; Public Works and Government Services Canada': [u'Public Works and Government Services Canada', u'PWGSC', u'Travaux publics et Services gouvernementaux Canada', u'TPSGC', u'81'],
+    'Government of Canada; Canadian Environmental Assessment Agency': [u'Canadian Environmental Assessment Agency', u'CEAA', u"Agence canadienne d'\xe9valuation environnementale", u'ACEE', u'270'],
+    'Government of Canada; Greffe du Tribunal de la concurrence': [u'Registry of the Competition Tribunal', u'RCT', u'Greffe du Tribunal de la concurrence', u'GTC', u'89'],
+    'Government of Canada; Public Services and Procurement Canada': [u'Public Works and Government Services Canada', u'PWGSC', u'Travaux publics et Services gouvernementaux Canada', u'TPSGC', u'81'],
+    'Government of Canada; Canadian Space Agency': [u'Canadian Space Agency', u'CSA', u'Agence spatiale canadienne', u'ASC', u'3'],
+    'Government of Canada; Agence de d\xc3\xa9veloppement \xc3\xa9conomique du Canada pour les r\xc3\xa9gions du Qu\xc3\xa9bec': [u'Economic Development Agency of Canada for the Regions of Quebec', u'CED', u'Agence de d\xe9veloppement \xe9conomique du Canada pour les r\xe9gions du Qu\xe9bec', u'DEC', u'93'],
+    'Government of Canada; \xc3\x89nergie atomique du Canada': [u'Limit\xe9e', u'Atomic Energy of Canada Limited', u'', u'\xc9nergie atomique du Canada', u'Limit\xe9e', u'', u'138'],
+    'Government of Canada; Defence Construction Canada': [u'Defence Construction Canada', u'DCC', u'Construction de D\xe9fense Canada', u'CDC', u'28'],
+    'Government of Canada; Agence de la consommation en mati\xc3\xa8re financi\xc3\xa8re du Canada': [u'Financial Consumer Agency of Canada', u'FCAC', u'Agence de la consommation en mati\xe8re financi\xe8re du Canada', u'ACFC', u'224'],
+    'Government of Canada; Anciens Combattants Canada': [u'Veterans Affairs Canada', u'VAC', u'Anciens Combattants Canada', u'ACC', u'189'],
+    'Government of Canada; Citizenship and Immigration Canada': [u'Citizenship and Immigration Canada', u'CIC', u'Citoyennet\xe9 et Immigration Canada', u'CIC', u'94'],
+    'Government of Canada; Transportation Safety Board of Canada': [u'Transportation Safety Board of Canada', u'TSB', u'Bureau de la s\xe9curit\xe9 des transports du Canada', u'BST', u'215'],
+    'Government of Canada; Parcs Canada': [u'Parks Canada', u'PC', u'Parcs Canada', u'PC', u'154'],
+    "Government of Canada; Commission d'examen des plaintes concernant la police militaire du Canada": [u'Military Police Complaints Commission of Canada', u'MPCC', u"Commission d'examen des plaintes concernant la police militaire du Canada", u'CPPM', u'66'],
+    'Government of Canada; Veterans Review and Appeal Board': [u'Veterans Review and Appeal Board', u'VRAB', u'Tribunal des anciens combattants (r\xe9vision et appel)', u'TACRA', u'85'],
+    'Government of Canada; D\xc3\xa9fense nationale': [u'National Defence', u'DND', u'D\xe9fense nationale', u'MDN', u'32'],
+    'Government of Canada; National Film Board': [u'National Film Board', u'NFB', u'Office national du film', u'ONF', u'167'],
+    'Government of Canada; Secr\xc3\xa9tariat des conf\xc3\xa9rences intergouvernementales canadiennes': [u'Canadian Intergovernmental Conference Secretariat', u'CICS', u'Secr\xe9tariat des conf\xe9rences intergouvernementales canadiennes', u'SCIC', u'274'],
+    'Government of Canada; Conseil canadien des normes': [u'Standards Council of Canada', u'SCC-CCN', u'Conseil canadien des normes', u'SCC-CCN', u'107'],
+    'Government of Canada; Registrar of the Supreme Court of Canada and that portion of the federal public administration appointed under subsection 12(2) of the Supreme Court Act': [u'Registrar of the Supreme Court of Canada and that portion of the federal public administration appointed under subsection 12(2) of the Supreme Court Act', u'SCC', u"Registraire de la Cour supr\xeame du Canada et le secteur de l'administration publique f\xe9d\xe9rale nomm\xe9 en vertu du paragraphe 12(2) de la Loi sur la Cour supr\xeame", u'CSC', u'63'],
+    "Government of Canada; Service canadien d'appui aux tribunaux administratifs": [u'Administrative Tribunals Support Service of Canada', u'ATSSC', u"Service canadien d'appui aux tribunaux administratifs", u'SCDATA', u'8888888'],
+    'Government of Canada; Environment and Climate Change Canada': [u'Environment Canada', u'EC', u'Environnement Canada', u'EC', u'99'],
+    "Government of Canada; Diversification de l'\xc3\xa9conomie de l'Ouest Canada": [u'Western Economic Diversification Canada', u'WD', u"Diversification de l'\xe9conomie de l'Ouest Canada", u'DEO', u'55'],
+    'Government of Canada; Canadian Commercial Corporation': [u'Canadian Commercial Corporation', u'CCC', u'Corporation commerciale canadienne', u'CCC', u'34'],
+    'Government of Canada; Administration canadienne de la s\xc3\xbbret\xc3\xa9 du transport a\xc3\xa9rien': [u'Canadian Air Transport Security Authority', u'CATSA', u'Administration canadienne de la s\xfbret\xe9 du transport a\xe9rien', u'ACSTA', u'250'],
+    'Government of Canada; Parks Canada': [u'Parks Canada', u'PC', u'Parcs Canada', u'PC', u'154'],
+    'Government of Canada; Office of the Public Sector Integrity Commissioner of Canada': [u'Office of the Public Sector Integrity Commissioner of Canada', u'PSIC', u"Commissariat \xe0 l'int\xe9grit\xe9 du secteur public du Canada", u'ISPC', u'210'],
+    'Government of Canada; Privy Council Office': [u'Privy Council Office', u'', u'Bureau du Conseil priv\xe9', u'', u'173'],
+    'Government of Canada; Bureau du commissaire du Centre de la s\xc3\xa9curit\xc3\xa9 des t\xc3\xa9l\xc3\xa9communications': [u'Office of the Communications Security Establishment Commissioner', u'OCSEC', u'Bureau du commissaire du Centre de la s\xe9curit\xe9 des t\xe9l\xe9communications', u'BCCST', u'279'],
+    'Government of Canada; Aboriginal Affairs and Northern Development Canada': [u'Aboriginal Affairs and Northern Development Canada', u'AANDC', u'Affaires autochtones et D\xe9veloppement du Nord Canada', u'AADNC', u'249'],
+    'Government of Canada; Gendarmerie royale du Canada': [u'Royal Canadian Mounted Police', u'RCMP', u'Gendarmerie royale du Canada', u'GRC', u'131'],
+    'Government of Canada; Transport Canada': [u'Transport Canada', u'TC', u'Transports Canada', u'TC', u'217'],
+    'Government of Canada; Environnement Canada': [u'Environment Canada', u'EC', u'Environnement Canada', u'EC', u'99'],
+    'Government of Canada; Public Health Agency of Canada': [u'Public Health Agency of Canada', u'PHAC', u'Agence de la sant\xe9 publique du Canada', u'ASPC', u'135'],
+    'Government of Canada; Public Service Commission of Canada': [u'Public Service Commission of Canada', u'PSC', u'Commission de la fonction publique du Canada', u'CFP', u'227'],
+    'Government of Canada; Office of the Commissioner of Official Languages': [u'Office of the Commissioner of Official Languages', u'OCOL', u'Commissariat aux langues officielles', u'CLO', u'258'],
+    'Government of Canada; P\xc3\xaaches et Oc\xc3\xa9ans Canada': [u'Fisheries and Oceans Canada', u'DFO', u'P\xeaches et Oc\xe9ans Canada', u'MPO', u'253'],
+    'Government of Canada; Administration de pilotage des Laurentides Canada': [u'Laurentian Pilotage Authority Canada', u'LPA', u'Administration de pilotage des Laurentides Canada', u'APL', u'213'],
+    'Government of Canada; Office of the Commissioner for Federal Judicial Affairs Canada': [u'Office of the Commissioner for Federal Judicial Affairs Canada', u'FJA', u'Commissariat \xe0 la magistrature f\xe9d\xe9rale Canada', u'CMF', u'140'],
+    'Government of Canada; Commission des relations de travail dans la fonction publique': [u'Public Service Labour Relations Board', u'PSLRB', u'Commission des relations de travail dans la fonction publique', u'CRTFP', u'102'],
+    'Government of Canada; Office of the Auditor General of Canada': [u'Office of the Auditor General of Canada', u'OAG', u'Bureau du v\xe9rificateur g\xe9n\xe9ral du Canada', u'BVG', u'125'],
+    'Government of Canada; Windsor-Detroit Bridge Authority': [u'Windsor-Detroit Bridge Authority', u'', u'Autorit\xe9 du pont Windsor-D\xe9troit', u'', u'55553'],
+    "Government of Canada; Commissariat \xc3\xa0 l'int\xc3\xa9grit\xc3\xa9 du secteur public du Canada": [u'Office of the Public Sector Integrity Commissioner of Canada', u'PSIC', u"Commissariat \xe0 l'int\xe9grit\xe9 du secteur public du Canada", u'ISPC', u'210'],
+    'Government of Canada; Mus\xc3\xa9e des beaux-arts du Canada': [u'National Gallery of Canada', u'NGC', u'Mus\xe9e des beaux-arts du Canada', u'MBAC', u'59'],
+    'Government of Canada; Military Grievances External Review Committee': [u'Military Grievances External Review Committee', u'MGERC', u"Comit\xe9 externe d'examen des griefs militaires", u'CEEGM', u'43'],
+    "Government of Canada; Soci\xc3\xa9t\xc3\xa9 d'assurance-d\xc3\xa9p\xc3\xb4ts du Canada": [u'Canada Deposit Insurance Corporation', u'CDIC', u"Soci\xe9t\xe9 d'assurance-d\xe9p\xf4ts du Canada", u'SADC', u'273'],
+    'Government of Canada; Bureau du surintendant des institutions financi\xc3\xa8res Canada': [u'Office of the Superintendent of Financial Institutions Canada', u'OSFI', u'Bureau du surintendant des institutions financi\xe8res Canada', u'BSIF', u'184'],
+    'Government of Canada; Jacques Cartier and Champlain Bridges Incorporated': [u'Jacques Cartier and Champlain Bridges Incorporated', u'JCCBI', u'Les Ponts Jacques-Cartier et Champlain Incorpor\xe9e', u'PJCCI', u'55559'],
+    'Government of Canada; Natural Resources Canada': [u'Natural Resources Canada', u'NRCan', u'Ressources naturelles Canada', u'RNCan', u'115'],
+    'Government of Canada; Bureau de la s\xc3\xa9curit\xc3\xa9 des transports du Canada': [u'Transportation Safety Board of Canada', u'TSB', u'Bureau de la s\xe9curit\xe9 des transports du Canada', u'BST', u'215'],
+    'Government of Canada; Service administratif des tribunaux judiciaires': [u'Courts Administration Service', u'CAS', u'Service administratif des tribunaux judiciaires', u'SATJ', u'228'],
+    "Government of Canada; Agence canadienne pour l'incitation \xc3\xa0 la r\xc3\xa9duction des \xc3\xa9missions": [u'Canada Emission Reduction Incentives Agency', u'', u"Agence canadienne pour l'incitation \xe0 la r\xe9duction des \xe9missions", u'', u'277'],
+    'Government of Canada; Public Service Staffing Tribunal': [u'Public Service Staffing Tribunal', u'PSST', u'Tribunal de la dotation de la fonction publique', u'TDFP', u'266'],
+    'Government of Canada; Human Rights Tribunal of Canada': [u'Human Rights Tribunal of Canada', u'HRTC', u'Tribunal des droits de la personne du Canada', u'TDPC', u'164'],
+    'Government of Canada; Corporation commerciale canadienne': [u'Canadian Commercial Corporation', u'CCC', u'Corporation commerciale canadienne', u'CCC', u'34'],
+    'Government of Canada; Enterprise Cape Breton Corporation': [u'Enterprise Cape Breton Corporation', u'', u"Soci\xe9t\xe9 d'expansion du Cap-Breton", u'', u'203'],
+    'Government of Canada; Crown-Indigenous Relations and Northern Affairs Canada': [u'Crown-Indigenous Relations and Northern Affairs Canada', u'AANDC', u'Relations Couronne-Autochtones et Affaires du Nord Canada', u'AADNC', u'249'],
+    'Government of Canada; Canadian Museum for Human Rights': [u'Canadian Museum for Human Rights', u'CMHR', u'Mus\xe9e canadien pour les droits de la personne', u'MCDP', u'267'],
+    'Government of Canada; RCMP External Review Committee': [u'RCMP External Review Committee', u'ERC', u"Comit\xe9 externe d'examen de la GRC", u'CEE', u'232'],
+    'Government of Canada; Veterans Affairs Canada': [u'Veterans Affairs Canada', u'VAC', u'Anciens Combattants Canada', u'ACC', u'189'],
+    'Government of Canada; Instituts de recherche en sant\xc3\xa9 du Canada': [u'Canadian Institutes of Health Research', u'CIHR', u'Instituts de recherche en sant\xe9 du Canada', u'IRSC', u'236'],
+    'Government of Canada; Bureau du directeur g\xc3\xa9n\xc3\xa9ral des \xc3\xa9lections': [u'Office of the Chief Electoral Officer', u'elections', u'Bureau du directeur g\xe9n\xe9ral des \xe9lections', u'elections', u'---'],
+    'Government of Canada; Library and Archives Canada': [u'Library and Archives Canada', u'LAC', u'Biblioth\xe8que et Archives Canada', u'BAC', u'129'],
+    'Government of Canada; Postes Canada': [u'Canada Post', u'CPC', u'Postes Canada', u'SCP', u'83'],
+    "Government of Canada; Soci\xc3\xa9t\xc3\xa9 canadienne d'hypoth\xc3\xa8ques et de logement": [u'Canada Mortgage and Housing Corporation', u'CMHC', u"Soci\xe9t\xe9 canadienne d'hypoth\xe8ques et de logement", u'SCHL', u'87'],
+    'Government of Canada; Health Canada': [u'Health Canada', u'HC', u'Sant\xe9 Canada', u'SC', u'271'],
+    'Government of Canada; Indian Residential Schools Truth and Reconciliation Commission': [u'Indian Residential Schools Truth and Reconciliation Commission', u'', u'Commission de v\xe9rit\xe9 et de r\xe9conciliation relative aux pensionnats indiens', u'', u'245'],
+    'Government of Canada; Administrative Tribunals Support Service of Canada': [u'Administrative Tribunals Support Service of Canada', u'ATSSC', u"Service canadien d'appui aux tribunaux administratifs", u'SCDATA', u'8888888'],
+    'Government of Canada; Global Affairs Canada': [u'Foreign Affairs and International Trade Canada', u'DFAIT', u'Affaires \xe9trang\xe8res et Commerce international Canada', u'MAECI', u'64'],
+    'Government of Canada; Financial Consumer Agency of Canada': [u'Financial Consumer Agency of Canada', u'FCAC', u'Agence de la consommation en mati\xe8re financi\xe8re du Canada', u'ACFC', u'224'],
+    'Government of Canada; Agence de promotion \xc3\xa9conomique du Canada atlantique': [u'Atlantic Canada Opportunities Agency', u'ACOA', u'Agence de promotion \xe9conomique du Canada atlantique', u'APECA', u'276'],
+    'Government of Canada; Canadian Security Intelligence Service': [u'Canadian Security Intelligence Service', u'CSIS', u'Service canadien du renseignement de s\xe9curit\xe9', u'SCRS', u'90'],
+    'Government of Canada; Canadian Museum of Nature': [u'Canadian Museum of Nature', u'CMN', u'Mus\xe9e canadien de la nature', u'MCN', u'57'],
+    'Government of Canada; Financement agricole Canada': [u'Farm Credit Canada', u'FCC', u'Financement agricole Canada', u'FAC', u'23'],
+    'Government of Canada; Commissariats \xc3\xa0 l\xe2\x80\x99information et \xc3\xa0 la protection de la vie priv\xc3\xa9e au Canada': [u'Offices of the Information and Privacy Commissioners of Canada', u'OPC', u'Commissariats \xe0 l\u2019information et \xe0 la protection de la vie priv\xe9e au Canada', u'CPVP', u'226'],
+    'Government of Canada; Federal Economic Development Agency for Southern Ontario': [u'Federal Economic Development Agency for Southern Ontario', u'FedDev Ontario', u"Agence f\xe9d\xe9rale de d\xe9veloppement \xe9conomique pour le Sud de l'Ontario", u'FedDev Ontario', u'21'],
+    'Government of Canada; National Defence': [u'National Defence', u'DND', u'D\xe9fense nationale', u'MDN', u'32'],
+    'Government of Canada; Office of the Secretary to the Governor General': [u'Office of the Secretary to the Governor General', u'OSGG', u'Bureau du secr\xe9taire du gouverneur g\xe9n\xe9ral', u'BSGG', u'5557'],
+    'Government of Canada; Courts Administration Service': [u'Courts Administration Service', u'CAS', u'Service administratif des tribunaux judiciaires', u'SATJ', u'228'],
+    "Government of Canada; Agence f\xc3\xa9d\xc3\xa9rale de d\xc3\xa9veloppement \xc3\xa9conomique pour le Sud de l'Ontario": [u'Federal Economic Development Agency for Southern Ontario', u'FedDev Ontario', u"Agence f\xe9d\xe9rale de d\xe9veloppement \xe9conomique pour le Sud de l'Ontario", u'FedDev Ontario', u'21'],
+    'Government of Canada; Conseil de la radiodiffusion et des t\xc3\xa9l\xc3\xa9communications canadiennes': [u'Canadian Radio-television and Telecommunications Commission', u'CRTC', u'Conseil de la radiodiffusion et des t\xe9l\xe9communications canadiennes', u'CRTC', u'126'],
+    "Government of Canada; Centre canadien d'hygi\xc3\xa8ne et de s\xc3\xa9curit\xc3\xa9 au travail": [u'Canadian Centre for Occupational Health and Safety', u'CCOHS', u"Centre canadien d'hygi\xe8ne et de s\xe9curit\xe9 au travail", u'CCHST', u'35'],
+    'Government of Canada; Greffe du Tribunal des revendications particuli\xc3\xa8res du Canada': [u'Registry of the Specific Claims Tribunal of Canada', u'SCT', u'Greffe du Tribunal des revendications particuli\xe8res du Canada', u'TRP', u'220'],
+    'Government of Canada; Biblioth\xc3\xa8que et Archives Canada': [u'Library and Archives Canada', u'LAC', u'Biblioth\xe8que et Archives Canada', u'BAC', u'129'],
+    'Government of Canada; Bureau du Conseil priv\xc3\xa9': [u'Privy Council Office', u'', u'Bureau du Conseil priv\xe9', u'', u'173'],
+    'Government of Canada; Agence canadienne de d\xc3\xa9veloppement \xc3\xa9conomique du Nord': [u'Canadian Northern Economic Development Agency', u'CanNor', u'Agence canadienne de d\xe9veloppement \xe9conomique du Nord', u'CanNor', u'4'],
+    'Government of Canada; Commission canadienne du lait': [u'Canadian Dairy Commission', u'CDC', u'Commission canadienne du lait', u'CCL', u'151'],
+    'Government of Canada; Parole Board of Canada': [u'Parole Board of Canada', u'PBC', u'Commission des lib\xe9rations conditionnelles du Canada', u'CLCC', u'246'],
+    'Government of Canada; Agence du revenu du Canada': [u'Canada Revenue Agency', u'CRA', u'Agence du revenu du Canada', u'ARC', u'47'],
+    'Government of Canada; Exportation et d\xc3\xa9veloppement Canada': [u'Export Development Canada', u'EDC', u'Exportation et d\xe9veloppement Canada', u'EDC', u'62'],
+    'Government of Canada; Library of Parliament': [u'Library of Parliament', u'LP', u'Biblioth\xe8que du Parlement', u'BP', u'55555'],
+    'Government of Canada; Farm Products Council of Canada': [u'Farm Products Council of Canada', u'FPCC', u'Conseil des produits agricoles du Canada', u'CPAC', u'200'],
+    'Government of Canada; Construction de D\xc3\xa9fense Canada': [u'Defence Construction Canada', u'DCC', u'Construction de D\xe9fense Canada', u'CDC', u'28'],
+    'Government of Canada; Registry of the Specific Claims Tribunal of Canada': [u'Registry of the Specific Claims Tribunal of Canada', u'SCT', u'Greffe du Tribunal des revendications particuli\xe8res du Canada', u'TRP', u'220'],
+    "Government of Canada; Mus\xc3\xa9e canadien de l'histoire": [u'Canadian Museum of History', u'CMH', u"Mus\xe9e canadien de l'histoire", u'MCH', u'263'],
+    'Government of Canada; Atlantic Pilotage Authority Canada': [u'Atlantic Pilotage Authority Canada', u'APA', u"Administration de pilotage de l'Atlantique Canada", u'APA', u'221'],
+    'Government of Canada; Office des transports du Canada': [u'Canadian Transportation Agency', u'CTA', u'Office des transports du Canada', u'OTC', u'124'],
+    'Government of Canada; Canadian Museum of Immigration at Pier 21': [u'Canadian Museum of Immigration at Pier 21', u'CMIP', u"Mus\xe9e canadien de l'immigration du Quai 21", u'MCIQ', u'2'],
+    'Government of Canada; Department of Finance Canada': [u'Department of Finance Canada', u'FIN', u'Minist\xe8re des Finances Canada', u'FIN', u'157'],
+    'Government of Canada; Commission de la fonction publique du Canada': [u'Public Service Commission of Canada', u'PSC', u'Commission de la fonction publique du Canada', u'CFP', u'227'],
+    'Government of Canada; Conseil de recherches en sciences humaines du Canada': [u'Social Sciences and Humanities Research Council of Canada', u'SSHRC', u'Conseil de recherches en sciences humaines du Canada', u'CRSH', u'207'],
+    'Government of Canada; Canadian Human Rights Commission': [u'Canadian Human Rights Commission', u'CHRC', u'Commission canadienne des droits de la personne', u'CCDP', u'113'],
+    'Government of Canada; Affaires autochtones et D\xc3\xa9veloppement du Nord Canada': [u'Aboriginal Affairs and Northern Development Canada', u'AANDC', u'Affaires autochtones et D\xe9veloppement du Nord Canada', u'AADNC', u'249'],
+    'Government of Canada; Service correctionnel du Canada': [u'Correctional Service of Canada', u'CSC', u'Service correctionnel du Canada', u'SCC', u'193'],
+    'Government of Canada; Public Servants Disclosure Protection Tribunal Canada': [u'Public Servants Disclosure Protection Tribunal Canada', u'PSDPTC', u'Tribunal de la protection des fonctionnaires divulgateurs Canada', u'TPFDC', u'40'],
+    'Government of Canada; Mus\xc3\xa9e canadien de la nature': [u'Canadian Museum of Nature', u'CMN', u'Mus\xe9e canadien de la nature', u'MCN', u'57'],
+    'Government of Canada; Blue Water Bridge Canada': [u'Blue Water Bridge Canada', u'bwbc', u'Pont Bleu Water', u'pbwc', u'333'],
+    'Government of Canada; Canada Science and Technology Museum': [u'Canada Science and Technology Museum', u'CSTM', u'Mus\xe9e des sciences et de la technologie du Canada', u'MSTC', u'202'],
+    'Government of Canada; Export Development Canada': [u'Export Development Canada', u'EDC', u'Exportation et d\xe9veloppement Canada', u'EDC', u'62'],
+    'Government of Canada; Biblioth\xc3\xa8que du Parlement': [u'Library of Parliament', u'LP', u'Biblioth\xe8que du Parlement', u'BP', u'55555'],
+    'Government of Canada; Pacific Pilotage Authority Canada': [u'Pacific Pilotage Authority Canada', u'PPA', u'Administration de pilotage du Pacifique Canada', u'APP', u'165'],
+    'Government of Canada; Canadian Transportation Agency': [u'Canadian Transportation Agency', u'CTA', u'Office des transports du Canada', u'OTC', u'124'],
+    'Government of Canada; Atomic Energy of Canada Limited': [u'Atomic Energy of Canada Limited', u'', u'\xc9nergie atomique du Canada', u'Limit\xe9e', u'', u'138'],
+    'Government of Canada; Affaires autochtones et du Nord Canada': [u'Aboriginal Affairs and Northern Development Canada', u'AANDC', u'Affaires autochtones et D\xe9veloppement du Nord Canada', u'AADNC', u'249'],
+    'Government of Canada; Ridley Terminals Inc.': [u'Ridley Terminals Inc.', u'', u'Ridley Terminals Inc.', u'', u'142'],
+    "Government of Canada; Administration de pilotage de l'Atlantique Canada": [u'Atlantic Pilotage Authority Canada', u'APA', u"Administration de pilotage de l'Atlantique Canada", u'APA', u'221'],
+    'Government of Canada; The Correctional Investigator Canada': [u'The Correctional Investigator Canada', u'OCI', u"L'Enqu\xeateur correctionnel Canada", u'BEC', u'5555'],
+    'Government of Canada; Employment and Social Development Canada': [u'Employment and Social Development Canada', u'esdc', u'Emploi et D\xe9veloppement social Canada', u'edsc', u'141'],
+    'Government of Canada; Service canadien du renseignement de s\xc3\xa9curit\xc3\xa9': [u'Canadian Security Intelligence Service', u'CSIS', u'Service canadien du renseignement de s\xe9curit\xe9', u'SCRS', u'90'],
+    'Government of Canada; VIA Rail Canada Inc.': [u'VIA Rail Canada Inc.', u'', u'VIA Rail Canada Inc.', u'', u'55555'],
+    'Government of Canada; Conseil du Tr\xc3\xa9sor': [u'Treasury Board', u'TB', u'Conseil du Tr\xe9sor', u'CT', u'105'],
+    'Government of Canada; Commissariat \xc3\xa0 la magistrature f\xc3\xa9d\xc3\xa9rale Canada': [u'Office of the Commissioner for Federal Judicial Affairs Canada', u'FJA', u'Commissariat \xe0 la magistrature f\xe9d\xe9rale Canada', u'CMF', u'140'],
+    'Government of Canada; Farm Credit Canada': [u'Farm Credit Canada', u'FCC', u'Financement agricole Canada', u'FAC', u'23'],
+    'Government of Canada; Office of the Communications Security Establishment Commissioner': [u'Office of the Communications Security Establishment Commissioner', u'OCSEC', u'Bureau du commissaire du Centre de la s\xe9curit\xe9 des t\xe9l\xe9communications', u'BCCST', u'279'],
+    'Government of Canada; Commission canadienne des droits de la personne': [u'Canadian Human Rights Commission', u'CHRC', u'Commission canadienne des droits de la personne', u'CCDP', u'113'],
+    'Government of Canada; Centre de la s\xc3\xa9curit\xc3\xa9 des t\xc3\xa9l\xc3\xa9communications Canada': [u'Communications Security Establishment Canada', u'CSEC', u'Centre de la s\xe9curit\xe9 des t\xe9l\xe9communications Canada', u'CSTC', u'156'],
+    "Government of Canada; Commission du droit d'auteur Canada": [u'Copyright Board Canada', u'CB', u"Commission du droit d'auteur Canada", u'CDA', u'116'],
+    'Government of Canada; Ressources naturelles Canada': [u'Natural Resources Canada', u'NRCan', u'Ressources naturelles Canada', u'RNCan', u'115'],
+    'Government of Canada; Office of the Superintendent of Financial Institutions Canada': [u'Office of the Superintendent of Financial Institutions Canada', u'OSFI', u'Bureau du surintendant des institutions financi\xe8res Canada', u'BSIF', u'184'],
+    "Government of Canada; Comit\xc3\xa9 externe d'examen de la GRC": [u'RCMP External Review Committee', u'ERC', u"Comit\xe9 externe d'examen de la GRC", u'CEE', u'232'],
+    'Government of Canada; Statistics Canada': [u'Statistics Canada', u'StatCan', u'Statistique Canada', u'StatCan', u'256'],
+    'Government of Canada; Canadian Food Inspection Agency': [u'Canadian Food Inspection Agency', u'CFIA', u"Agence canadienne d'inspection des aliments", u'ACIA', u'206'],
+    'Government of Canada; Canada Deposit Insurance Corporation': [u'Canada Deposit Insurance Corporation', u'CDIC', u"Soci\xe9t\xe9 d'assurance-d\xe9p\xf4ts du Canada", u'SADC', u'273'],
+    'Government of Canada; \xc3\x89cole de la fonction publique du Canada': [u'Canada School of Public Service', u'CSPS', u'\xc9cole de la fonction publique du Canada', u'EFPC', u'73'],
+    'Government of Canada; Immigration and Refugee Board of Canada': [u'Immigration and Refugee Board of Canada', u'IRB', u"Commission de l'immigration et du statut de r\xe9fugi\xe9 du Canada", u'CISR', u'5'],
+    'Government of Canada; Commissariat au lobbying du Canada': [u'Office of the Commissioner of Lobbying of Canada', u'OCL', u'Commissariat au lobbying du Canada', u'CAL', u'205'],
+    'Government of Canada; Commission de v\xc3\xa9rit\xc3\xa9 et de r\xc3\xa9conciliation relative aux pensionnats indiens': [u'Indian Residential Schools Truth and Reconciliation Commission', u'', u'Commission de v\xe9rit\xe9 et de r\xe9conciliation relative aux pensionnats indiens', u'', u'245'],
+    'Government of Canada; Canadian Dairy Commission': [u'Canadian Dairy Commission', u'CDC', u'Commission canadienne du lait', u'CCL', u'151'],
+    "Government of Canada; Mus\xc3\xa9e canadien de l'immigration du Quai 21": [u'Canadian Museum of Immigration at Pier 21', u'CMIP', u"Mus\xe9e canadien de l'immigration du Quai 21", u'MCIQ', u'2'],
+    'Government of Canada; Industry Canada': [u'Industry Canada', u'IC', u'Industrie Canada', u'IC', u'230'],
+    'Government of Canada; Transportation Appeal Tribunal of Canada': [u'Transportation Appeal Tribunal of Canada', u'TATC', u"Tribunal d'appel des transports du Canada", u'TATC', u'96'],
+    'Government of Canada; Offices of the Information and Privacy Commissioners of Canada': [u'Offices of the Information and Privacy Commissioners of Canada', u'OPC', u'Commissariats \xe0 l\u2019information et \xe0 la protection de la vie priv\xe9e au Canada', u'CPVP', u'226'],
+    'Government of Canada; Security Intelligence Review Committee': [u'Security Intelligence Review Committee', u'SIRC', u'Comit\xe9 de surveillance des activit\xe9s de renseignement de s\xe9curit\xe9', u'CSARS', u'109'],
+    'Government of Canada; Impact Assessment Agency of Canada': [u'Impact Assessment Agency of Canada', u'IAAC', u"Agence d'Évaluation d'Impact du Canada", u'AEIC', u'209'],
     ############################################
     ## Alberta Gov Department
     ############################################
-    'Government of Alberta; Alberta Geological Survey'                                                                                                               :['Alberta Geological Survey', 'ab', 'Commission géologique de l\'Alberta','ab','66677'],
-    'Government of Alberta; Alberta Environment and Parks'                                                                                                           :['Alberta Environment and Parks', 'ab', 'Environnement et parcs de l\'Alberta','ab','666772'],
-    'Government of Alberta; Alberta Parks'                                                                                                                           :['Alberta Parks', 'ab', 'Parcs de l\'Alberta','ab','666771'],
-    'Government of Alberta; Land Use Secretariat'                                                                                                                    :['Land Use Secretariat', 'ab', '; Secrétariat de l\'utilisation des terres','ab','66677'],
-    'Government of Alberta; Government Data'                                                                                                                         :['Government Data', 'ab', '; Données gouvernementales','ab','666773'],
-    'Government of Alberta; Alberta Justice and Solicitor General'                                                                                                   :['Alberta Justice and Solicitor General', 'ab', '; Justice et Solliciteur général de l\'Alberta','ab','666774'],
-    'Government of Alberta; Alberta Agriculture and Forestry'                                                                                                        :['Alberta Agriculture and Forestry', 'ab', '; Agriculture et foresterie de l\'Alberta','ab','666775'],
-    'Government of Alberta; Treasury Board and Finance'                                                                                                              :['Treasury Board and Finance', 'ab', '; Conseil du Trésor et Finances','ab','66678'],
-    'Government of Alberta; Alberta Health'                                                                                                                          :['Alberta Health', 'ab', '; Alberta Health','ab','66679'],
+    'Government of Alberta; Alberta Geological Survey': ['Alberta Geological Survey', 'ab', 'Commission géologique de l\'Alberta', 'ab', '666600'],
+    'Government of Alberta; Alberta Environment and Parks': ['Alberta Environment and Parks', 'ab', 'Environnement et parcs de l\'Alberta', 'ab', '666601'],
+    'Government of Alberta; Alberta Parks': ['Alberta Parks', 'ab', 'Parcs de l\'Alberta', 'ab', '666602'],
+    'Government of Alberta; Land Use Secretariat': ['Land Use Secretariat', 'ab', '; Secrétariat de l\'utilisation des terres', 'ab', '666603'],
+    'Government of Alberta; Government Data': ['Government Data', 'ab', '; Données gouvernementales', 'ab', '666604'],
+    'Government of Alberta; Alberta Justice and Solicitor General': ['Alberta Justice and Solicitor General', 'ab', '; Justice et Solliciteur général de l\'Alberta', 'ab', '666605'],
+    'Government of Alberta; Alberta Agriculture and Forestry': ['Alberta Agriculture and Forestry', 'ab', '; Agriculture et foresterie de l\'Alberta', 'ab', '666606'],
+    'Government of Alberta; Treasury Board and Finance': ['Treasury Board and Finance', 'ab', '; Conseil du Trésor et Finances', 'ab', '666607'],
+    'Government of Alberta; Alberta Health': ['Alberta Health', 'ab', '; Alberta Health', 'ab', '666608'],
+    'Government of Alberta; Alberta Energy': ["Alberta Energy", 'ab', '; Alberta Energy', 'ab', '666609'],
+    'Government of Alberta; Government of Alberta': ["Government of Alberta", 'ab', "; Gouvernement de l'Alberta", 'ab', '666609'],
     #############################################
     ## Government of British Columbia Department
     #############################################
-    'Government of British Columbia; Agriculture and Forestry'                                                                                                                                       :['Agriculture and Forestry', 'bc', 'Agriculture et Foret','cb','77771'],
-    'Government of British Columbia; Natural Resources'                                                                                                                                              :['Natural Resources', 'bc', 'Ressources Naturelles','cb','77771'],
-    'Government of British Columbia; BC-Natural Resources'                                                                                                                                           :['Natural Resources', 'bc', 'Ressources Naturelles','cb','77772'],
-    'Government of British Columbia; Education'                                                                                                                                                      :['Education', 'bc', 'Éducation','cb','77773'],
-    'Government of British Columbia; Transportation'                                                                                                                                                 :['Transportation', 'bc', 'Transport','cb','777794'],
-    'Government of British Columbia; Service'                                                                                                                                                        :['Service', 'bc', 'Service','cb','777794'],
-    'Government of British Columbia; Justice'                                                                                                                                                        :['Justice', 'bc', 'Justice','cb','66666'],
-    'Government of British Columbia; Economy'                                                                                                                                                        :['Economy', 'bc', 'Économie','cb','66677'],
-    'Government of British Columbia; Health and Safety'                                                                                                                                              :['Health and Safety', 'bc', 'Santé et sécurité','cb','66777'],
-    'Government of British Columbia; Social Services'                                                                                                                                               :['Social Services', 'bc', 'Services sociaux','cb','77771']
- 
+    'Government of British Columbia; Agriculture and Forestry': ['Agriculture and Forestry', 'bc', 'Agriculture et Foret', 'cb', '777700'],
+    'Government of British Columbia; Natural Resources': ['Natural Resources', 'bc', 'Ressources Naturelles', 'cb', '777701'],
+    'Government of British Columbia; BC-Natural Resources': ['Natural Resources', 'bc', 'Ressources Naturelles', 'cb', '777702'],
+    'Government of British Columbia; Education': ['Education', 'bc', 'Éducation', 'cb', '777703'],
+    'Government of British Columbia; Transportation': ['Transportation', 'bc', 'Transport', 'cb', '777704'],
+    'Government of British Columbia; Service': ['Service', 'bc', 'Service', 'cb', '777705'],
+    'Government of British Columbia; Justice': ['Justice', 'bc', 'Justice', 'cb', '777706'],
+    'Government of British Columbia; Economy': ['Economy', 'bc', 'Économie', 'cb', '777707'],
+    'Government of British Columbia; Health and Safety': ['Health and Safety', 'bc', 'Santé et sécurité', 'cb', '777709'],
+    'Government of British Columbia; Social Services': ['Social Services', 'bc', 'Services sociaux', 'cb', '777710'],
+    'Government of British Columbia; Government of British Columbia': ['Government of British Columbia', 'bc', 'Gouvernement de la Colombie-Britanique', 'cb', '777710'],
+
+    #############################################
+    ## Government of Ontario
+    #############################################
+    'Government of Ontario; Government of Ontario': ['Government of Ontario', 'on', 'Gouvernement de l\'Ontario', 'on', '888833'],
+
+    #############################################
+    ## Government of Quebec/Québec
+    #############################################
+    'Government of Quebec; Quebec Geological Survey': ['Quebec Geological Survey', 'qc', 'Commission géologique du Québec', 'qc', '888800'],
+    'Government and Municipalities of Québec; City of Montreal': ['City of Montreal', 'qc', 'Ville de Montréal', 'qc', '888001'],
+    'Government and Municipalities of Québec; City of Longueuil': ['City of Longueuil', 'qc', 'Ville de Longueuil', 'qc', '888002'],
+    'Government and Municipalities of Québec': ['Government and Municipalities of Québec', 'qc', 'Gouvernement et municipalités du Québec', 'qc', '888000'],
+    'Government and Municipalities of Québec; Government and Municipalities of Québec': ['Government and Municipalities of Québec', 'qc', 'Gouvernement et municipalités du Québec', 'qc', '888044'],
+    'Gouvernement et municipalités du Québec; Gouvernement et municipalités du Québec': ['Gouvernement et municipalités du Québec', 'qc', 'Gouvernement et municipalités du Québec', 'qc', '888044'],
+    'Quebec Government and Municipalities; Quebec Government and Municipalities': ['Government and Municipalities of Québec', 'qc', 'Gouvernement et municipalités du Québec', 'qc', '888044'],
+    'Québec Government and Municipalities; Québec Government and Municipalities': ['Government and Municipalities of Québec', 'qc', 'Gouvernement et municipalités du Québec', 'qc', '888044'],
+    #############################################
+    ## Government of Brunswick
+    #############################################
+    'Government of New Brunswick; New Brunswick Geological Survey': ['New Brunswick Geological Survey', 'nb', 'Commission géologique du Nouveau-Brunswick', 'nb', '999900'],
+
+    #############################################
+    ## Government of Yukon
+    #############################################
+    'Government of Yukon; Yukon Geological Survey': ['Yukon Geological Survey', 'yk', 'Commission géologique du Yukon', 'yk', '555500']
+
 }
 
 # Imported now - update by running schema-sync.py
@@ -2624,7 +3095,7 @@ GC_Registry_of_Applied_Terms = {
 #     'site Web'                               :[u'website'],
 #     'workflow'                               :[u'workflow'],
 #     'flux des travaux'                       :[u'workflow'],
-    
+
 #     'abstract'                               :[u'abstract'],
 #     'affidavit'                              :[u'affidavit'],
 #     'agenda'                                 :[u'agenda'],
@@ -2946,15 +3417,14 @@ CL_Subjects = {
 }
 
 OGP_catalogueType = {
-    'Data'       : [u'Data',                       u'Données'],
-    'Geo Data'   : [u'Geo Data',                   u'Géo'],
-    'FGP Data'   : [u'FGP Data',                   u'FGP Data'],
-    'Données'    : [u'Data',                       u'Données'],
-    'Géo'        : [u'Geo Data',                   u'Géo'],
-    'FGP Data'   : [u'FGP Data',                   u'FGP Data']
+    'Data': [u'Data', u'Données'],
+    'Geo Data': [u'Geo Data', u'Géo'],
+    'FGP Data': [u'FGP Data', u'FGP Data'],
+    'Données': [u'Data', u'Données'],
+    'Géo': [u'Geo Data', u'Géo'],
+    'FGP Data': [u'FGP Data', u'FGP Data']
 }
 
 if __name__ == "__main__":
     arguments = docopt.docopt(__doc__)
     sys.exit(main())
-    

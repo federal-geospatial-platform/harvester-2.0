@@ -25,9 +25,9 @@ OPERATION_ENV = 'staging'
 Extract *HNAP* XML from the CSW source.  Prints xml out to be piped to another command or to a file.
 
 ```
-./harvest_hnap.py > hnap.xml
+./harvest_hnap.py [options] [options]... > hnap.xml
 or
-./harvest_hnap.py | parsing_command
+./harvest_hnap.py [options] [options]... | parsing_command
 ```
 
 Presently extracts everything but will eventually extract a window of data (e.g.: metadata records updated in the last two weeks).  The alternate time filtering request available and commended out in the script.
@@ -38,11 +38,11 @@ This process runs in a few seconds depending on network latency.
 Converts *HNAP* XML file to a *Common Core* mapped CKAN compliant JSON Lines file.  Accepts streamed in or file path as an argument and prints out JSON Lines output.
 
 ```
-./harvest_hnap.py | ./hnap2json.py > CommonCore_CKAN.jsonl
+./harvest_hnap.py [options] [options]...| ./hnap2cc-json.py hnap2cc-json [options] [options]... > CommonCore_CKAN.jsonl
 or
-cat hnap.xml | ./hnap2json.py > CommonCore_CKAN.jsonl
+cat hnap.xml | ./hnap2cc-json.py [options] [options]... > CommonCore_CKAN.jsonl
 or
-./hnap2json.py hnap.xml > CommonCore_CKAN.jsonl 
+./hnap2cc-json.py hnap.xml [options] [options]... > CommonCore_CKAN.jsonl 
 ```
 
 This process runs in a couple seconds.

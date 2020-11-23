@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Usage: harvest.py [-f from_iso_date_time (e.g. 1970-01-01T00:00:00Z)] [-e environment_input (e.g. staging/production or stag/prod)]
+"""Usage: harvest.py [-f from_iso_date_time (e.g. 1970-01-01T00:00:00Z)] [-t to_iso_date_time (e.g. 1970-01-02T00:00:00Z)] [-e environment_input (e.g. staging/production or stag/prod)] [-p province_or_territory_name (e.g. Ontario/On Quebec/Qc)]
 
 Extract HNAP XML from FGP platform
 
 Options:
-    -f ISO datetime object that defines when to start harvesting
-    -e ISO string to define the harvester runing environment taging/production  
+    -f ISO datetime object that defines when to start harvesting (from date)
+    -t ISO datetme object that defines when to end harvesting (to date)
+    -e ISO string to define the harvester running environment staging/production
+    -p ISO string to define the province were to request data from
 """
 
 # CSW metadata extraction
@@ -42,9 +44,50 @@ import docopt
 def main():
     ## Connection variables
     env = 'STAGING'
+    bgetprovdata = False
+    strprovname = 0
+    OrgNameSearchString = {
+        "CANADA" :"Government_of_Canada",
+        "CAN"    : "Government_of_Canada",
+        "ALBERTA":"Government_of_Alberta",
+        "AB":"Government_of_Alberta",
+        "BRITISH":"Government_of_British_Columbia",
+        "BC" : "Government_of_British_Columbia",
+        "NEW-BRUNSWICK":"Government_of_New_Brunswick",
+        "NB" : "Government_of_New_Brunswick",
+        "YUKON":"Government_of_Yukon",
+        "YK" : "Government_of_Yukon",
+        "QUEBEC":"Government_and_Municipalities_of_Québec",
+        "QC" : "Government_and_Municipalities_of_Québec",
+        "PQ" : "Government_and_Municipalities_of_Québec",
+        "ONTARIO":"Government_of_Ontario",
+        "ON" : "Government_of_Ontario",
+        "NOVA-SCOTIA":"Government_of_Nova_Scotia",
+        "NS" : "Government_of_Nova_Scotia",
+        "MANITOBA":"Government_of_Manitoba",
+        "MB" : "Government_of_Manitoba",
+        "NEWFOUNDLAND":"Government_of_Newfoundland_and_Labrador",
+        "TN" : "Government_of_Newfoundland_and_Labrador",
+        "Saskatchewan":"Government_of_Saskatchewan",
+        "SK" : "Government_of_Saskatchewan",
+        "NORTH-WEST": "Government_of_Northwest_Territories",
+        "NW" : "Government_of_Northwest_Territories",
+        "NUNAVUT":"Government_of_Nunavut",
+        "NV" : "Government_of_Nunavut",
+        "PRINCE-EDWARD-ISLAND":"Government_of_Prince_Edward_Island",
+        "PEI" : "Government_of_Prince_Edward_Island",
+        "IPE" : "Government_of_Prince_Edward_Island"
+    }
+    
     if arguments['-e']:
         env = arguments['-e']
     
+    if arguments['-p']:
+        provinput = arguments['-p'].upper()
+        strprovname = OrgNameSearchString[provinput]
+        bgetprovdata = True
+
+
     if env.upper() =='STAGING':
         csw_url = 'maps-staging.canada.ca/geonetwork/srv/csw' #Staging URL
     elif env.upper() =='PRODUCTION':
@@ -135,7 +178,7 @@ def main():
     xmlns:csw="http://www.opengis.net/cat/csw/2.0.2"
     service="CSW"
     version="2.0.2"
-    resultType="results"
+    resultType="results_with_summary"
     outputSchema="csw:IsoRecord"
     maxRecords="%d"
     startPosition="%d"
@@ -149,7 +192,7 @@ def main():
                 xmlns="http://www.opengis.net/ogc"
                 xmlns:gml="http://www.opengis.net/gml">
                 <PropertyIsGreaterThanOrEqualTo>
-                    <PropertyName>Modified</PropertyName>
+                    <PropertyName>_changeDate</PropertyName>
                     <Literal>%s</Literal>
                 </PropertyIsGreaterThanOrEqualTo>
             </Filter>
@@ -158,10 +201,82 @@ def main():
 </csw:GetRecords>
 """
 
+    request_template_startenddate = """<?xml version="1.0"?>
+<csw:GetRecords
+    xmlns:csw="http://www.opengis.net/cat/csw/2.0.2"
+    service="CSW"
+    version="2.0.2"
+    resultType="results_with_summary"
+    outputSchema="csw:IsoRecord"
+    maxRecords="%d"
+    startPosition="%d"
+>
+    <csw:Query
+        typeNames="gmd:MD_Metadata">
+        <csw:ElementSetName>full</csw:ElementSetName>
+        <csw:Constraint
+            version="1.1.0">
+            <Filter
+                xmlns="http://www.opengis.net/ogc"
+                xmlns:gml="http://www.opengis.net/gml">
+                <PropertyIsGreaterThanOrEqualTo>
+                    <PropertyName>changeDate</PropertyName>
+                    <Literal>%s</Literal>
+                </PropertyIsGreaterThanOrEqualTo>
+            </Filter>
+            <Filter
+                xmlns="http://www.opengis.net/ogc"
+                xmlns:gml="http://www.opengis.net/gml">
+                <PropertyIsLessThanOrEqualTo>
+                    <PropertyName>changeDate</PropertyName>
+                    <Literal>%s</Literal>
+                </PropertyIsLessThanOrEqualTo>                
+            </Filter>            
+        </csw:Constraint>
+    </csw:Query>
+</csw:GetRecords>
+"""
+    if bgetprovdata :
+        request_template = """<?xml version="1.0"?>
+<csw:GetRecords
+    xmlns:csw="http://www.opengis.net/cat/csw/2.0.2" 
+    service="CSW" 
+    version="2.0.2" 
+    resultType="results" 
+    outputSchema="csw:IsoRecord" 
+    maxRecords="%d" 
+    startPosition="%d"
+>
+    <csw:Query
+        typeNames="gmd:MD_Metadata">
+        <csw:ElementSetName>full</csw:ElementSetName>
+        <csw:Constraint
+            version="1.1.0">
+            <Filter
+                xmlns="http://www.opengis.net/ogc" 
+                xmlns:gml="http://www.opengis.net/gml">
+                <PropertyIsLike matchCase="false" wildCard="%%" singleChar="_" escapeChar="\">
+                    <PropertyName>OrganisationName</PropertyName>
+                    <Literal>%s%%</Literal>
+                </PropertyIsLike>
+            </Filter>
+        </csw:Constraint>
+    </csw:Query>
+</csw:GetRecords>
+"""
+
+
+
     # Is there a specified start date
     if arguments['-f']:
         start_date = arguments['-f']
 
+    # Is there a specified end date
+    if arguments['-t']:
+        end_date = arguments['-t']    
+    
+    
+ 
     active_page = 0
     next_record = 1
     request_another = True
@@ -184,12 +299,27 @@ def main():
         #
         # Kitchen Sink is the valid HNAP, we need HNAP for R1 to debug issues
         # This filter was supplied by EC, the CSW service technical lead
-        current_request = request_template % (
+        if bgetprovdata:
+            current_request = request_template % (
             records_per_request,
             next_record,
-            start_date
-        )
-
+            strprovname
+            )
+        else:
+            current_request = request_template % (
+            records_per_request,
+            next_record,
+            start_date )
+        # # Is there a specified end date
+        # if arguments['-t']:
+        #     end_date = arguments['-t']   
+        #     current_request = request_template_startenddate % (
+        #         records_per_request,
+        #         next_record,
+        #         start_date,
+        #         end_date
+        #     )
+        
         # (active_page*records_per_request)+1
         csw.getrecords2(format='xml', xml=current_request)
         active_page += 1
