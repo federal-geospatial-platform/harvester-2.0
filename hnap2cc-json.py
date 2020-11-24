@@ -101,13 +101,17 @@ if not sys.stdin.isatty():
     # DEBUG END
 
 # Otherwise, read for a given filename
-elif not args.f == None:
+if not args.f == None:
     input_file = args.f
-    input_file = open(args.f, 'rU').read().splitlines()
+    with open("harvested_records.xml", 'rb') as fh:
+        input_file = BytesIO(fh.read())
+    # input_file = open(args.f, 'rb').read().splitlines()
     records_root = ("/gmd:MD_Metadata")
     SingleXmlInput = True
 else:
-    input_file = open("harvested_records.xml", 'rU').read().splitlines()
+    with open("harvested_records.xml", 'rb') as fh:
+        input_file = BytesIO(fh.read())
+    # input_file = open("harvested_records.xml", 'rb').read().splitlines()
     records_root = ("/csw:GetRecordsResponse/"
                       "csw:SearchResults/"
                       "gmd:MD_Metadata")
@@ -147,11 +151,12 @@ input_data_blocks.append(active_input_block)
 
 ##################################################
 # Extract the schema to convert to
-schema_file_ca = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps.csv'
+schema_file_ca    = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-ca-en.csv'
+schema_file_ca_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-ca-fr.csv'
 schema_file_en = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-en.csv'
 schema_file_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-fr.csv'
 schema_file_on = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-on.csv'
-schema_file_ca_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-ca-fr.csv'
+
 
 schema_ref = {}
 schemafile = None
@@ -416,12 +421,12 @@ def main():
             if QcgovData1 in ReadOrgName.lower():
                 schema_ref = {}
                 schema_ref = loadSchemaConfig(schema_file_fr)
-            if QcgovData2 in ReadOrgName.lower():
+            elif QcgovData2 in ReadOrgName.lower():
                 schema_ref = {}
                 schema_ref = loadSchemaConfig(schema_file_fr)
             elif CangovData in ReadOrgName.lower():
                 schema_ref = {}
-                schema_ref = loadSchemaConfig(schema_file_ca)
+                schema_ref = loadSchemaConfig(schema_file_ca_en)
             elif OngovData in ReadOrgName.lower():
                 schema_ref = {}
                 schema_ref = loadSchemaConfig(schema_file_on)
