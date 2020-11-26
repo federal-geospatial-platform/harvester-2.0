@@ -237,6 +237,7 @@ function UploadToOpenCanada(){
                     for filez in $JsonOutPutDir
                     do
                         # take action on each file. $f store current file name
+                        echo processing $filez json file
                         ckanapi load datasets -I $filez -r https://staging.open.canada.ca/data -a $CKAN_API_KEY_STAG # && date +"%Y-%m-%dT%H:%M:%S" > run.last
                         if [ -f $filez ]; then
                             rm $filez
@@ -280,4 +281,4 @@ function UploadToOpenCanada(){
 InitializeInput
 #UploadToOpenCanada
 RetreiveMetadataXML
-#UploadToOpenCanada
+UploadToOpenCanada

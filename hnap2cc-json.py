@@ -103,7 +103,7 @@ if not sys.stdin.isatty():
 # Otherwise, read for a given filename
 if not args.f == None:
     input_file = args.f
-    with open("harvested_records.xml", 'rb') as fh:
+    with open(args.f, 'rb') as fh:
         input_file = BytesIO(fh.read())
     # input_file = open(args.f, 'rb').read().splitlines()
     records_root = ("/gmd:MD_Metadata")
@@ -151,10 +151,10 @@ input_data_blocks.append(active_input_block)
 
 ##################################################
 # Extract the schema to convert to
-schema_file_ca    = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-ca-en.csv'
+schema_file_ca_en   = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-ca-en.csv'
 schema_file_ca_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-ca-fr.csv'
-schema_file_en = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-en.csv'
-schema_file_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-fr.csv'
+schema_file_en = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-pr-en.csv'
+schema_file_fr = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-pr-fr.csv'
 schema_file_on = 'config/Schema--GC.OGS.TBS-CommonCore-OpenMaps-on.csv'
 
 
@@ -408,15 +408,31 @@ def main():
             ##################################################
             # Language is required, the rest can't be processed
             # for errors if the primary language is not certain
-            ReadOrgName = fetchXMLValues(record, schema_ref["06a"]['FGP XPATH'])[0]
+            ReadOrgName = None
+            strfileIdentifier = fetchXMLValues(record, schema_ref["05"]['FGP XPATH'])
+
+            if sanitySingle('NOID', ['fileIdentifier'], strfileIdentifier) is False:
+                    HNAP_fileIdentifier = False
+            else:
+                HNAP_fileIdentifier = sanityFirst(strfileIdentifier)
+            if HNAP_fileIdentifier:
+                ReadOrgName = fetch_FGP_value(record, HNAP_fileIdentifier, schema_ref["16a"])
+                if len(ReadOrgName) > 0:
+                    ReadOrgName = ReadOrgName[0]
+                else:
+                    print 'no valid orgnamefound for ' + HNAP_fileIdentifier
+                    return 0
+            else:
+                print 'no valid  file identifier found : ' + HNAP_fileIdentifier
+                return 0
+            
             fetch_nunicipalname = [x for x in MunicipalDict if unicode(x.lower(), 'UTF-8') in ReadOrgName.lower()]
+            
             ReadOrgName = ReadOrgName.split(';')[0]
             QcgovData1 = unicode('québec'.lower(), 'utf-8')
             QcgovData2 = unicode('quebec'.lower(), 'utf-8')
             CangovData = unicode('Canada'.lower(), 'utf-8')
             OngovData = unicode('Ontario'.lower(), 'utf-8')
-
-
 
             if QcgovData1 in ReadOrgName.lower():
                 schema_ref = {}

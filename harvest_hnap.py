@@ -86,8 +86,9 @@ def main():
         provinput = arguments['-p'].upper()
         strprovname = OrgNameSearchString[provinput]
         bgetprovdata = True
-
-
+		
+    csw_url = None
+    
     if env.upper() =='STAGING':
         csw_url = 'maps-staging.canada.ca/geonetwork/srv/csw' #Staging URL
     elif env.upper() =='PRODUCTION':
@@ -178,7 +179,7 @@ def main():
     xmlns:csw="http://www.opengis.net/cat/csw/2.0.2"
     service="CSW"
     version="2.0.2"
-    resultType="results_with_summary"
+    resultType="results"
     outputSchema="csw:IsoRecord"
     maxRecords="%d"
     startPosition="%d"
